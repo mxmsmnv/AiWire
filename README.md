@@ -462,6 +462,36 @@ foreach (['ai_overview', 'ai_brand_story', 'ai_food_pairing', 'ai_serving_guide'
 }
 ```
 
+
+**Result** — saved to page fields, rendered in template:
+
+```html
+<section class="ai_overview">
+  Louis Roederer Cristal 2015 is a prestige cuvée champagne that represents the pinnacle
+  of the house's winemaking artistry. Aged for six years on the lees, this vintage delivers
+  an extraordinary complexity — notes of candied citrus, white flowers, and toasted brioche
+  unfold gradually, supported by a chalky minerality...
+</section>
+
+<section class="ai_brand_story">
+  Louis Roederer was the first champagne house to own all its vineyards outright.
+  In 1876, Tsar Alexander II demanded a clear crystal bottle so no one could hide
+  poison — and Cristal was born as history's first prestige cuvée...
+</section>
+
+<section class="ai_food_pairing">
+  1. Grilled lobster with drawn butter — the wine's citrus acidity cuts through
+     the richness of the butter while complementing the sweet shellfish...
+</section>
+
+<section class="ai_serving_guide">
+  Serve at 10-12°C in a tulip-shaped white wine glass to concentrate the delicate aromas.
+  No decanting needed, but open 15 minutes before serving to let the wine breathe...
+</section>
+```
+
+Each block is generated once by AI, saved to the page field, and on subsequent requests served instantly from the database — no API call.
+
 ---
 
 ### 2. Auto-generate SEO on page save
@@ -501,6 +531,18 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     ]);
 });
 ```
+
+
+**Result** — fields saved to the product page after editor clicks Save:
+
+```
+$page->seo_description = "Discover the 2015 Louis Roederer Cristal — a prestige champagne
+                          with six years of aging, delivering citrus and brioche elegance."
+
+$page->og_title = "2015 Cristal: Six Years of Champagne Perfection"
+```
+
+Editor sees a notification: *"AI generated SEO fields"*. Both fields are editable in the admin if the editor wants to tweak them.
 
 ---
 
@@ -552,6 +594,29 @@ $results = $ai->generate($page, [
 ], ['cache' => 'M']);
 ```
 
+
+**Result** — three content sections populated on the brand page:
+
+```
+ai_brand_history:
+  "Founded in 1776 in Reims, France, Louis Roederer remains one of the last
+  major family-owned champagne houses. Under the direction of Frédéric Rouzaud,
+  the seventh generation, the house cultivates 240 hectares of Grand and Premier
+  Cru vineyards — an unusual commitment to estate-grown fruit..."
+
+ai_brand_highlights:
+  "1. Cristal 2015 stands as the flagship — a prestige cuvée with six years of lees aging
+   2. The Brut Premier NV offers exceptional value as an everyday champagne
+   3. Unlike most houses, 70% of their grapes are estate-grown..."
+
+ai_brand_faq:
+  "**Q: Where is Louis Roederer from?**
+   A: Reims, Champagne, France — founded in 1776.
+
+   **Q: What is their flagship product?**
+   A: Cristal, originally created in 1876 for Tsar Alexander II..."
+```
+
 ---
 
 ### 4. Category page descriptions
@@ -588,6 +653,21 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
         ['maxTokens' => 400, 'temperature' => 0.6]
     );
 });
+```
+
+
+**Result** — the category page now has an SEO-friendly description:
+
+```
+ai_description:
+  "Whiskey is a spirit of remarkable depth, shaped by grain, water, and time in
+  oak barrels. From the smoky peat of Islay single malts to the caramel sweetness
+  of Kentucky bourbon, each bottle tells a story of terroir and tradition.
+
+  Our collection of 127 whiskeys spans the world's most celebrated distilleries.
+  Whether you're discovering your first single malt or hunting for a rare cask-strength
+  release, you'll find expressions from Scotland, Ireland, Japan, and the American
+  heartland — all selected for character and quality."
 ```
 
 ---
@@ -644,6 +724,33 @@ $results = $ai->generate($page, [
 ], ['cache' => 'W']);
 ```
 
+
+**Result** — the cocktail page gets four complete sections:
+
+```
+ai_recipe_intro:
+  "The Freddie Bartholomew is a refreshing mocktail that blends crisp apple juice
+  with bright lemon and the gentle warmth of ginger ale, named after the beloved
+  child actor of the 1930s Golden Age of Hollywood."
+
+ai_recipe_steps:
+  "1. Fill a highball glass with ice cubes
+   2. Pour 120ml apple juice and 30ml fresh lemon juice over the ice
+   3. Top with 90ml chilled ginger ale and stir gently
+   4. Garnish with a thin apple slice and a lemon wheel
+   5. Serve immediately with a paper straw"
+
+ai_recipe_tips:
+  "• Swap ginger ale for ginger beer if you prefer a spicier kick
+   • Freeze apple juice in ice cube trays — they keep the drink cold without dilution
+   • Don't shake carbonated ingredients; always stir gently to preserve the fizz"
+
+ai_recipe_variations:
+  "1. 'The Smoky Freddie' — add 15ml smoked simple syrup and garnish with a rosemary sprig
+   2. 'Tropical Bartholomew' — replace apple juice with mango nectar and add passion fruit
+   3. 'Winter Freddie' — warm the apple juice, add cinnamon and star anise, skip the ginger ale"
+```
+
 ---
 
 ### 6. Region / terroir guide
@@ -688,6 +795,28 @@ $results = $ai->generate($page, [
 ], ['cache' => 'M']);
 ```
 
+
+**Result** — the region page is enriched with educational content:
+
+```
+ai_region_overview:
+  "Champagne, the northernmost wine region of France, sits on a unique bed of
+  chalk and limestone that imparts a distinctive minerality to its sparkling wines.
+  The cool continental climate, with average temperatures just above the minimum
+  for grape ripening, creates the high acidity that gives Champagne its signature
+  freshness and aging potential.
+
+  Three grape varieties dominate: Chardonnay for elegance, Pinot Noir for body,
+  and Pinot Meunier for fruitiness. The méthode champenoise — secondary fermentation
+  in the bottle — transforms still wine into the world's most celebrated sparkling wine..."
+
+ai_region_recommendations:
+  "1. Louis Roederer Cristal 2015 — the benchmark prestige cuvée, worth every penny
+     for a special celebration. Expect white flowers, citrus, and extraordinary length.
+   2. Bollinger Special Cuvée NV — a Pinot Noir-dominant blend with toasty richness,
+     perfect for pairing with roast chicken or aged cheeses..."
+```
+
 ---
 
 ### 7. Review summarizer
@@ -726,6 +855,18 @@ if ($reviews->count() >= 3) {
         ]
     );
 }
+```
+
+
+**Result** — a concise summary replaces 50+ individual reviews:
+
+```
+ai_review_summary:
+  "Across 47 reviews averaging 4.6/5, customers consistently praise the Cristal 2015's
+  exceptional balance of citrus freshness and toasty complexity, with many noting it
+  outperforms its price point. The most common complaint is limited availability.
+  Best suited for collectors and special-occasion drinkers who appreciate elegant,
+  food-friendly champagne."
 ```
 
 ---
@@ -780,6 +921,18 @@ $wire->addHookBefore('Pages::saveReady', function(HookEvent $event) {
 });
 ```
 
+
+**Result** — flagged review is auto-unpublished:
+
+```php
+// AI returns: {"safe": false, "reason": "Promotional spam: contains external store URLs"}
+// ProcessWire admin shows warning: "Review flagged by AI: Promotional spam: contains external store URLs"
+// The review page status is set to Unpublished
+// moderation_note field stores the reason for moderator reference
+```
+
+Safe reviews pass through without any changes. Only flagged reviews require moderator attention.
+
 ---
 
 ### 9. Multi-language product descriptions
@@ -831,6 +984,25 @@ function translateProducts() {
 // Run via LazyCron
 $wire->addHook('LazyCron::everyHour', function() { translateProducts(); });
 ```
+
+
+**Result** — translation fields populated on the product page:
+
+```
+body_es: "El Cristal 2015 de Louis Roederer es un champán de prestigio que representa
+          la cumbre del arte vinícola de la casa. Envejecido durante seis años sobre
+          sus lías, esta añada ofrece una complejidad extraordinaria..."
+
+body_fr: "Le Cristal 2015 de Louis Roederer est une cuvée de prestige qui représente
+          le sommet de l'art vinicole de la maison..."
+
+body_ja: "ルイ・ロデレール クリスタル 2015は、メゾンのワイン造りの芸術の頂点を
+          代表するプレステージ・キュヴェです..."
+
+body_zh: "路易王妃水晶香槟2015年份是酒庄酿酒工艺的巅峰之作..."
+```
+
+LazyCron processes 20 products per hour — a 500-product catalog is fully translated in ~25 hours.
 
 ---
 
@@ -904,6 +1076,24 @@ echo json_encode([
 ]);
 ```
 
+
+**Result** — JSON API response for the frontend chat widget:
+
+```json
+{
+  "success": true,
+  "reply": "For a smoky whiskey under $60, I'd recommend the Lagavulin 16 Year Old
+    (/spirits/whiskey/lagavulin-16/) — it's a classic Islay single malt with deep
+    peat smoke, maritime salt, and a long sweet finish. If you want something slightly
+    less intense, try the Talisker 10 Year Old (/spirits/whiskey/talisker-10/)
+    which balances smoke with peppery spice and honey.",
+  "products": [
+    {"title": "Lagavulin 16 Year Old", "url": "/spirits/whiskey/lagavulin-16/"},
+    {"title": "Talisker 10 Year Old", "url": "/spirits/whiskey/talisker-10/"}
+  ]
+}
+```
+
 ---
 
 ### 11. Tasting notes generator
@@ -940,6 +1130,17 @@ $wire->addHook('LazyCron::every6Hours', function() {
         );
     }
 });
+```
+
+
+**Result** — professional tasting notes saved to the product:
+
+```
+tasting_notes:
+  "Deep amber with golden highlights. The nose opens with rich caramel, dried apricot,
+  and a whisper of peat smoke over toasted oak. On the palate, layers of dark chocolate,
+  orange marmalade, and warm baking spices unfold with a velvety texture. The finish
+  is long and warming, with lingering notes of espresso and sea salt."
 ```
 
 ---
@@ -1001,6 +1202,32 @@ echo json_encode([
 ]);
 ```
 
+
+**Result** — JSON API response for the gift finder widget:
+
+```json
+{
+  "success": true,
+  "recommendations": [
+    {
+      "product": "Lagavulin 16 Year Old",
+      "reason": "A legendary Islay single malt — perfect for a father who appreciates
+        smoky, complex whiskey. The iconic square bottle makes an impressive gift."
+    },
+    {
+      "product": "Balvenie DoubleWood 12",
+      "reason": "Approachable yet sophisticated, aged in two types of cask. Great for
+        someone exploring single malts. Well within budget at $65."
+    },
+    {
+      "product": "Redbreast 12 Year Old",
+      "reason": "Ireland's finest pot still whiskey — smooth, fruity, and universally
+        loved. If your dad enjoys smooth sipping whiskey, this is a safe bet."
+    }
+  ]
+}
+```
+
 ---
 
 ### 13. Compare products with AI
@@ -1046,6 +1273,28 @@ $result = $ai->ask(
         'pageId'      => $products->first()->id,
     ]
 );
+```
+
+
+**Result** — natural-language comparison rendered on the page:
+
+```
+"All three are premium single malts, but they offer very different experiences.
+
+The Lagavulin 16 is the boldest of the three — heavy peat smoke, maritime salt,
+and a long, warming finish. It's an Islay classic that demands attention.
+
+The Balvenie DoubleWood 12 sits at the opposite end — smooth, honeyed, and
+approachable, with vanilla and dried fruit from its dual-cask aging. It's the
+best entry point for single malt beginners.
+
+The Talisker 10 bridges the gap — moderate smoke with a peppery kick and coastal
+character that's complex without being overwhelming.
+
+If you prefer bold, smoky flavors: Lagavulin 16.
+If you want smooth and easy-drinking: Balvenie DoubleWood 12.
+If you want the best of both worlds: Talisker 10.
+Best value for money: Balvenie DoubleWood 12 at $65."
 ```
 
 ---
@@ -1109,6 +1358,23 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 });
 ```
 
+
+**Result** — tags automatically created and assigned to the product:
+
+```
+Page "Lagavulin 16 Year Old" now has ai_tags:
+  → Smoky (created: /tags/smoky/)
+  → Premium (created: /tags/premium/)
+  → Gift-worthy (created: /tags/gift-worthy/)
+  → After-dinner (created: /tags/after-dinner/)
+  → Aged (created: /tags/aged/)
+  → Peaty (created: /tags/peaty/)
+  → Islay (created: /tags/islay/)
+  → Full-bodied (created: /tags/full-bodied/)
+```
+
+Tags that already exist are reused; new ones are created under `/tags/`. Products become instantly filterable in your catalog.
+
 ---
 
 ### 15. Weekly newsletter with AI summary
@@ -1157,6 +1423,26 @@ $wire->addHook('LazyCron::everyWeek', function() {
         $mail->send();
     }
 });
+```
+
+
+**Result** — subscribers receive an email:
+
+```
+Subject: LQRS Weekly: 12 New Arrivals
+
+Body:
+"This week we've welcomed 12 exciting new additions to our shelves, and there's
+something for every palate. Whiskey lovers will be thrilled by the arrival of the
+Redbreast 15 Year Old and the limited-edition Lagavulin Feis Ile 2024 — both
+are exceptional expressions that won't last long.
+
+On the wine front, we've added a stunning Barolo from Aldo Conterno and a crisp
+Sancerre from Jean Reverdy that's already turning heads among our staff.
+
+Meanwhile, the Buffalo Trace continues its reign as our most-viewed product this
+week with over 2,300 page views, followed closely by the perennial favorite
+Lagavulin 16. Cheers to a great week of discoveries!"
 ```
 
 ---
@@ -1217,6 +1503,24 @@ echo json_encode([
 ]);
 ```
 
+
+**Result** — multi-turn conversation via JSON API:
+
+```json
+// Turn 1: User asks
+{"message": "I like smoky whiskey, what do you have?"}
+→ {"success": true, "reply": "We have several great smoky options! The Lagavulin 16..."}
+
+// Turn 2: User follows up (AI remembers context)
+{"message": "Which one is best for under $70?"}
+→ {"success": true, "reply": "For under $70, I'd go with the Talisker 10 at $55..."}
+
+// Turn 3: User changes topic (AI still has full history)
+{"message": "Do you have any good red wines too?"}
+→ {"success": true, "reply": "Absolutely! If you enjoy bold, smoky flavors in whiskey,
+    you might appreciate a full-bodied red like the Aldo Conterno Barolo..."}
+```
+
 ---
 
 ### 17. Compare AI providers (A/B testing)
@@ -1244,6 +1548,22 @@ foreach ($results as $provider => $result) {
     echo "<tr><td>{$provider}</td><td>{$content}</td><td>{$tokens}</td></tr>";
 }
 echo "</table>";
+```
+
+
+**Result** — comparison table showing each provider's response:
+
+```
+| Provider  | Response                                          | Tokens |
+|-----------|---------------------------------------------------|--------|
+| anthropic | "A 12-year-old single malt Scotch typically        | 142    |
+|           | reveals layers of honey, vanilla, and dried..."    |        |
+| openai    | "The flavor profile opens with warm caramel        | 156    |
+|           | and orchard fruit, transitioning to gentle..."     |        |
+| google    | "Expect a harmonious balance of sweet malt,        | 138    |
+|           | subtle oak spice, and a whisper of smoke..."       |        |
+| xai       | "Rich and complex, this whisky delivers notes      | 151    |
+|           | of toffee, cinnamon, and toasted almond..."        |        |
 ```
 
 ---
@@ -1300,6 +1620,26 @@ $wire->addHook('LazyCron::everyHour', function() {
 });
 ```
 
+
+**Result** — LazyCron log after one hour:
+
+```
+[AiWire] askAndSave: saved tasting notes for "Voltage Vodka" (page 1042)
+[AiWire] askAndSave: saved tasting notes for "La Fabrique 70% Vodka" (page 1043)
+[AiWire] askAndSave: saved tasting notes for "Humble Banane Banana Liqueur" (page 1044)
+... (10 products processed)
+
+[AiWire] askAndSave: saved brand history for "Chivas Regal" (page 2001)
+[AiWire] askAndSave: saved brand history for "Mauro Vannucci" (page 2002)
+... (5 brands processed)
+
+[AiWire] askAndSave: saved category description for "Vodka" (page 3001)
+[AiWire] askAndSave: saved category description for "Liqueurs & Cordials" (page 3002)
+... (5 categories processed)
+```
+
+After 24 hours: ~240 products, ~120 brands, ~120 categories filled automatically.
+
 ---
 
 ### 19. Image alt-text generator
@@ -1348,6 +1688,22 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     $page->save('images', ['quiet' => true]);
 });
 ```
+
+
+**Result** — image descriptions saved to the Images field:
+
+```
+images[0]->description = "Bottle of Lagavulin 16 Year Old single malt Scotch whisky
+                          with distinctive white label on dark green glass"
+
+images[1]->description = "Close-up of Lagavulin 16 whisky poured in a Glencairn glass
+                          showing deep amber color"
+
+images[2]->description = "Lagavulin distillery on the shore of Lagavulin Bay, Islay,
+                          Scotland with white buildings and pagoda roofs"
+```
+
+Alt texts appear in `<img alt="...">` tags — improving SEO and accessibility scores.
 
 ---
 
@@ -1406,6 +1762,25 @@ $wire->addHookAfter('FormBuilder::processReady', function(HookEvent $event) {
     }
 });
 ```
+
+
+**Result** — email routed to the correct department:
+
+```
+// Customer message: "I run a restaurant chain and want to discuss bulk pricing
+// for your whiskey selection. We'd need 50+ cases monthly."
+//
+// AI analysis: {"department": "wholesale", "priority": "high",
+//               "summary": "Restaurant chain bulk whiskey inquiry, 50+ cases/month"}
+//
+// → Email sent to: wholesale@lqrs.com
+// → Subject: [high] Restaurant chain bulk whiskey inquiry, 50+ cases/month
+// → Body: From: john@restaurant.com
+//
+//   I run a restaurant chain and want to discuss bulk pricing...
+```
+
+Sales inquiries go to sales@, support tickets go to support@, wholesale requests go to wholesale@ — automatically, within seconds.
 
 ---
 
