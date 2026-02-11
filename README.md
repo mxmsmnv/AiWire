@@ -4,6 +4,45 @@ Connect your ProcessWire site to AI providers: **Anthropic (Claude)**, **OpenAI 
 
 Manage multiple API keys per provider, test connections from admin, and use AI in your templates with a clean PHP API.
 
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Result Format](#result-format)
+- [API Reference](#api-reference)
+- [Options](#options)
+- [Supported Models](#supported-models-february-2026)
+- [Usage Examples](#usage-examples)
+  - [1. Product page AI content blocks](#1-product-page-ai-content-blocks)
+  - [2. Auto-generate SEO on page save](#2-auto-generate-seo-on-page-save)
+  - [3. Brand page enrichment](#3-brand-page-enrichment)
+  - [4. Category page descriptions](#4-category-page-descriptions)
+  - [5. Cocktail recipe generator](#5-cocktail-recipe-generator)
+  - [6. Region / terroir guide](#6-region--terroir-guide)
+  - [7. Review summarizer](#7-review-summarizer)
+  - [8. Content moderation for user reviews](#8-content-moderation-for-user-reviews)
+  - [9. Multi-language product descriptions](#9-multi-language-product-descriptions)
+  - [10. AI sommelier chatbot](#10-ai-sommelier-chatbot)
+  - [11. Tasting notes generator](#11-tasting-notes-generator)
+  - [12. Gift recommendation engine](#12-gift-recommendation-engine)
+  - [13. Compare products with AI](#13-compare-products-with-ai)
+  - [14. Auto-tag products with AI](#14-auto-tag-products-with-ai)
+  - [15. Weekly newsletter with AI summary](#15-weekly-newsletter-with-ai-summary)
+  - [16. Multi-turn chatbot with session history](#16-multi-turn-chatbot-with-session-history)
+  - [17. Compare AI providers (A/B testing)](#17-compare-ai-providers-ab-testing)
+  - [18. Bulk content generation with LazyCron](#18-bulk-content-generation-with-lazycron)
+  - [19. Image alt-text generator](#19-image-alt-text-generator)
+  - [20. Form submission analysis and routing](#20-form-submission-analysis-and-routing)
+- [Multiple Keys & Fallback](#multiple-keys--fallback)
+- [Admin Interface](#admin-interface)
+- [Cache](#cache)
+- [Field Storage](#field-storage)
+- [Logging](#logging)
+- [Tips & Best Practices](#tips--best-practices)
+- [License](#license)
+
 ---
 
 ## Features
@@ -73,6 +112,60 @@ if ($result['success']) {
     echo $result['content'];        // AI response text
     echo $result['usage']['total_tokens']; // tokens used
 }
+```
+
+---
+
+## Result Format
+
+Every `ask()`, `askWithFallback()`, `askAndSave()`, and `generate()` call returns an array with this structure:
+
+```php
+// Successful response
+[
+    'success' => true,
+    'content' => 'The AI response text...',
+    'message' => 'OK',
+    'usage'   => [
+        'input_tokens'  => 25,
+        'output_tokens' => 148,
+        'total_tokens'  => 173,
+    ],
+    'raw'     => [ /* full API response */ ],
+    'cached'  => false,       // true if served from file cache
+    'source'  => 'ai',        // only in askAndSave/generate: 'ai', 'field', or 'error'
+]
+
+// Failed response
+[
+    'success' => false,
+    'content' => '',
+    'message' => 'Error description...',
+    'usage'   => [],
+    'raw'     => [ /* raw error response */ ],
+]
+```
+
+`chat()` returns just the text string (or empty string on error):
+
+```php
+$text = $ai->chat('Summarize this');  // "Here is a summary..."
+```
+
+`generate()` and batch `askAndSave()` return results keyed by field name:
+
+```php
+$results = $ai->generate($page, [
+    ['field' => 'ai_overview', 'prompt' => '...'],
+    ['field' => 'ai_summary',  'prompt' => '...'],
+]);
+
+// $results:
+[
+    'ai_overview' => ['success' => true, 'content' => '...', 'source' => 'ai', ...],
+    'ai_summary'  => ['success' => true, 'content' => '...', 'source' => 'field', ...],
+    //                                                          ^ already existed, no AI call
+]
 ```
 
 ---
