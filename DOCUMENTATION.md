@@ -320,22 +320,27 @@ Every method that accepts `$options` supports these parameters:
 
 ### OpenRouter (400+ models)
 
-| Model ID | Name |
-|----------|------|
-| `deepseek/deepseek-v3.2` | DeepSeek V3.2 |
-| `qwen/qwen3-max-thinking` | Qwen 3 Max Thinking |
-| `google/gemini-3-flash-preview` | Gemini 3 Flash Preview |
-| `google/gemini-2.5-flash` | Gemini 2.5 Flash |
-| `minimax/minimax-m2.1` | MiniMax M2.1 |
-| `z-ai/glm-4.7` | GLM 4.7 |
-| `mistralai/devstral-2512` | Devstral 2512 |
-| `mistralai/mistral-small-3.2-24b-instruct` | Mistral Small 3.2 24B |
-| `meta-llama/llama-4-maverick` | Llama 4 Maverick |
-| `nvidia/nemotron-3-nano-30b-a3b` | Nemotron 3 Nano 30B |
-| `meta-llama/llama-3.3-70b-instruct` | Llama 3.3 70B |
-| `openai/gpt-5.2` | GPT-5.2 (via OR) |
-| `anthropic/claude-sonnet-4.5` | Claude Sonnet 4.5 (via OR) |
-| `x-ai/grok-4-1-fast` | Grok 4.1 Fast (via OR) |
+| Company | Model ID | Name |
+|---------|----------|------|
+| Amazon | `amazon/nova-micro-v1` | Nova Micro |
+| Amazon | `amazon/nova-2-lite-v1` | Nova 2 Lite |
+| Anthropic | `anthropic/claude-sonnet-4.5` | Claude Sonnet 4.5 (via OR) |
+| ByteDance | `bytedance-seed/seed-1.6` | Seed 1.6 |
+| DeepSeek | `deepseek/deepseek-v3.2` | DeepSeek V3.2 |
+| Google | `google/gemini-3-flash-preview` | Gemini 3 Flash Preview |
+| Google | `google/gemini-2.5-flash` | Gemini 2.5 Flash |
+| Meta | `meta-llama/llama-4-maverick` | Llama 4 Maverick |
+| Meta | `meta-llama/llama-3.3-70b-instruct` | Llama 3.3 70B |
+| MiniMax | `minimax/minimax-m2.1` | MiniMax M2.1 |
+| Mistral | `mistralai/devstral-2512` | Devstral 2512 |
+| Mistral | `mistralai/mistral-small-3.2-24b-instruct` | Mistral Small 3.2 24B |
+| NVIDIA | `nvidia/nemotron-3-nano-30b-a3b` | Nemotron 3 Nano 30B |
+| OpenAI | `openai/gpt-5.2` | GPT-5.2 (via OR) |
+| Qwen (Alibaba) | `qwen/qwen3-max-thinking` | Qwen 3 Max Thinking |
+| Xiaomi | `xiaomi/mimo-v2-flash` | MiMo V2 Flash |
+| xAI | `x-ai/grok-4-1-fast` | Grok 4.1 Fast (via OR) |
+| Zhipu AI | `z-ai/glm-4.7` | GLM 4.7 |
+| Zhipu AI | `z-ai/glm-5` | GLM 5 |
 
 > **Tip:** OpenRouter gives you access to all providers through a single API key. Useful if you want to test different models without managing separate accounts.
 

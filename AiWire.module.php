@@ -117,20 +117,39 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             ],
             'defaultModel' => 'deepseek/deepseek-v3.2',
             'models' => [
+                // Amazon
+                'amazon/nova-micro-v1'                      => 'Nova Micro',
+                'amazon/nova-2-lite-v1'                     => 'Nova 2 Lite',
+                // Anthropic
+                'anthropic/claude-sonnet-4.5'               => 'Claude Sonnet 4.5 (via OR)',
+                // ByteDance
+                'bytedance-seed/seed-1.6'                   => 'Seed 1.6',
+                // DeepSeek
                 'deepseek/deepseek-v3.2'                    => 'DeepSeek V3.2',
-                'qwen/qwen3-max-thinking'                   => 'Qwen 3 Max Thinking',
+                // Google
                 'google/gemini-3-flash-preview'             => 'Gemini 3 Flash Preview',
                 'google/gemini-2.5-flash'                   => 'Gemini 2.5 Flash',
+                // Meta
+                'meta-llama/llama-4-maverick'               => 'Llama 4 Maverick',
+                'meta-llama/llama-3.3-70b-instruct'         => 'Llama 3.3 70B',
+                // MiniMax
                 'minimax/minimax-m2.1'                      => 'MiniMax M2.1',
-                'z-ai/glm-4.7'                              => 'GLM 4.7',
+                // Mistral
                 'mistralai/devstral-2512'                   => 'Devstral 2512',
                 'mistralai/mistral-small-3.2-24b-instruct'  => 'Mistral Small 3.2 24B',
-                'meta-llama/llama-4-maverick'               => 'Llama 4 Maverick',
+                // NVIDIA
                 'nvidia/nemotron-3-nano-30b-a3b'            => 'Nemotron 3 Nano 30B',
-                'meta-llama/llama-3.3-70b-instruct'         => 'Llama 3.3 70B',
+                // OpenAI
                 'openai/gpt-5.2'                            => 'GPT-5.2 (via OR)',
-                'anthropic/claude-sonnet-4.5'               => 'Claude Sonnet 4.5 (via OR)',
+                // Qwen (Alibaba)
+                'qwen/qwen3-max-thinking'                   => 'Qwen 3 Max Thinking',
+                // Xiaomi
+                'xiaomi/mimo-v2-flash'                      => 'MiMo V2 Flash',
+                // xAI
                 'x-ai/grok-4-1-fast'                        => 'Grok 4.1 Fast (via OR)',
+                // Zhipu AI
+                'z-ai/glm-4.7'                              => 'GLM 4.7',
+                'z-ai/glm-5'                                => 'GLM 5',
             ],
         ],
     ];

@@ -159,7 +159,7 @@ $results = $ai->generate($page, [
 | **OpenAI** | `gpt-5.2`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1` |
 | **Google** | `gemini-3-pro-preview`, `gemini-flash-latest`, `gemini-flash-lite-latest` |
 | **xAI** | `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-3-mini` |
-| **OpenRouter** | `deepseek/deepseek-v3.2`, `qwen/qwen3-max-thinking`, `meta-llama/llama-4-maverick`, and 400+ more |
+| **OpenRouter** | `deepseek/deepseek-v3.2`, `qwen/qwen3-max-thinking`, `meta-llama/llama-4-maverick`, `amazon/nova-2-lite-v1`, `z-ai/glm-5`, `xiaomi/mimo-v2-flash`, `bytedance-seed/seed-1.6`, and 400+ more |
 
 ---
 
