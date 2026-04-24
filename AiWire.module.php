@@ -48,10 +48,11 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             'extraHeaders' => [
                 'anthropic-version' => '2023-06-01',
             ],
-            'defaultModel' => 'claude-sonnet-4-5-20250929',
+            'defaultModel' => 'claude-sonnet-4-6-20260217',
             'models' => [
+                'claude-opus-4-7'            => 'Claude Opus 4.7',
                 'claude-opus-4-6'            => 'Claude Opus 4.6',
-                'claude-sonnet-4-5-20250929' => 'Claude Sonnet 4.5',
+                'claude-sonnet-4-6-20260217' => 'Claude Sonnet 4.6',
                 'claude-haiku-4-5-20251001'  => 'Claude Haiku 4.5',
             ],
         ],
@@ -64,12 +65,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             'keyPrefix'   => 'sk-',
             'headerType'  => 'bearer',
             'extraHeaders' => [],
-            'defaultModel' => 'gpt-4.1',
+            'defaultModel' => 'gpt-5.4',
             'models' => [
-                'gpt-5.2'     => 'GPT-5.2',
-                'gpt-5-mini'  => 'GPT-5 Mini',
-                'gpt-5-nano'  => 'GPT-5 Nano',
-                'gpt-4.1'     => 'GPT-4.1',
+                'gpt-5.4'      => 'GPT-5.4',
+                'gpt-5.4-mini' => 'GPT-5.4 Mini',
+                'gpt-5.4-nano' => 'GPT-5.4 Nano',
+                'gpt-5.2'      => 'GPT-5.2',
+                'gpt-4.1'      => 'GPT-4.1',
             ],
         ],
         'google' => [
@@ -81,11 +83,12 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             'keyPrefix'   => '',
             'headerType'  => 'bearer',
             'extraHeaders' => [],
-            'defaultModel' => 'gemini-flash-latest',
+            'defaultModel' => 'gemini-3-flash',
             'models' => [
-                'gemini-3-pro-preview'  => 'Gemini 3 Pro Preview',
-                'gemini-flash-latest'   => 'Gemini Flash',
-                'gemini-flash-lite-latest' => 'Gemini Flash Lite',
+                'gemini-3.1-pro-preview'   => 'Gemini 3.1 Pro Preview',
+                'gemini-3-flash'           => 'Gemini 3 Flash',
+                'gemini-3.1-flash-lite'    => 'Gemini 3.1 Flash Lite',
+                'gemini-2.5-flash'         => 'Gemini 2.5 Flash',
             ],
         ],
         'xai' => [
@@ -99,9 +102,11 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             'extraHeaders' => [],
             'defaultModel' => 'grok-4-1-fast-non-reasoning',
             'models' => [
+                'grok-4.20'                   => 'Grok 4.20',
                 'grok-4-1-fast-reasoning'     => 'Grok 4.1 Fast (Reasoning)',
                 'grok-4-1-fast-non-reasoning' => 'Grok 4.1 Fast',
-                'grok-3-mini'                 => 'Grok 3 Mini',
+                'grok-code-fast-1'            => 'Grok Code Fast 1',
+            ],
             ],
         ],
         'openrouter' => [
@@ -121,13 +126,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 'amazon/nova-micro-v1'                      => 'Nova Micro',
                 'amazon/nova-2-lite-v1'                     => 'Nova 2 Lite',
                 // Anthropic
-                'anthropic/claude-sonnet-4.5'               => 'Claude Sonnet 4.5 (via OR)',
+                'anthropic/claude-sonnet-4.6'               => 'Claude Sonnet 4.6 (via OR)',
                 // ByteDance
                 'bytedance-seed/seed-1.6'                   => 'Seed 1.6',
                 // DeepSeek
                 'deepseek/deepseek-v3.2'                    => 'DeepSeek V3.2',
                 // Google
-                'google/gemini-3-flash-preview'             => 'Gemini 3 Flash Preview',
+                'google/gemini-3-flash'                     => 'Gemini 3 Flash',
                 'google/gemini-2.5-flash'                   => 'Gemini 2.5 Flash',
                 // Meta
                 'meta-llama/llama-4-maverick'               => 'Llama 4 Maverick',
@@ -140,7 +145,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 // NVIDIA
                 'nvidia/nemotron-3-nano-30b-a3b'            => 'Nemotron 3 Nano 30B',
                 // OpenAI
-                'openai/gpt-5.2'                            => 'GPT-5.2 (via OR)',
+                'openai/gpt-5.4'                            => 'GPT-5.4 (via OR)',
                 // Qwen (Alibaba)
                 'qwen/qwen3-max-thinking'                   => 'Qwen 3 Max Thinking',
                 // Xiaomi
@@ -767,7 +772,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      *       [
      *           'field'   => 'ai_brand_facts',
      *           'prompt'  => "Share 3 interesting facts about the brand...",
-     *           'options' => ['provider' => 'openai', 'model' => 'gpt-5-nano'],
+     *           'options' => ['provider' => 'openai', 'model' => 'gpt-5.4-nano'],
      *       ],
      *       [
      *           'field'        => 'ai_review_summary',

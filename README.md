@@ -151,14 +151,14 @@ $results = $ai->generate($page, [
 
 ---
 
-## Supported Models (February 2026)
+## Supported Models (April 2026)
 
 | Provider | Models |
 |----------|--------|
-| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001` |
-| **OpenAI** | `gpt-5.2`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1` |
-| **Google** | `gemini-3-pro-preview`, `gemini-flash-latest`, `gemini-flash-lite-latest` |
-| **xAI** | `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-3-mini` |
+| **Anthropic** | `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6-20260217`, `claude-haiku-4-5-20251001` |
+| **OpenAI** | `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2`, `gpt-4.1` |
+| **Google** | `gemini-3.1-pro-preview`, `gemini-3-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash` |
+| **xAI** | `grok-4.20`, `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-code-fast-1` |
 | **OpenRouter** | `deepseek/deepseek-v3.2`, `qwen/qwen3-max-thinking`, `meta-llama/llama-4-maverick`, `amazon/nova-2-lite-v1`, `z-ai/glm-5`, `xiaomi/mimo-v2-flash`, `bytedance-seed/seed-1.6`, and 400+ more |
 
 ---

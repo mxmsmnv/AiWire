@@ -283,40 +283,44 @@ Every method that accepts `$options` supports these parameters:
 
 ---
 
-## Supported Models (February 2026)
+## Supported Models (April 2026)
 
 ### Anthropic (Claude)
 
 | Model ID | Name |
 |----------|------|
+| `claude-opus-4-7` | Claude Opus 4.7 |
 | `claude-opus-4-6` | Claude Opus 4.6 |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-sonnet-4-6-20260217` | Claude Sonnet 4.6 |
 | `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
 
 ### OpenAI (GPT)
 
 | Model ID | Name |
 |----------|------|
+| `gpt-5.4` | GPT-5.4 |
+| `gpt-5.4-mini` | GPT-5.4 Mini |
+| `gpt-5.4-nano` | GPT-5.4 Nano |
 | `gpt-5.2` | GPT-5.2 |
-| `gpt-5-mini` | GPT-5 Mini |
-| `gpt-5-nano` | GPT-5 Nano |
 | `gpt-4.1` | GPT-4.1 |
 
 ### Google (Gemini)
 
 | Model ID | Name |
 |----------|------|
-| `gemini-3-pro-preview` | Gemini 3 Pro Preview |
-| `gemini-flash-latest` | Gemini Flash |
-| `gemini-flash-lite-latest` | Gemini Flash Lite |
+| `gemini-3.1-pro-preview` | Gemini 3.1 Pro Preview |
+| `gemini-3-flash` | Gemini 3 Flash |
+| `gemini-3.1-flash-lite` | Gemini 3.1 Flash Lite |
+| `gemini-2.5-flash` | Gemini 2.5 Flash |
 
 ### xAI (Grok)
 
 | Model ID | Name |
 |----------|------|
+| `grok-4.20` | Grok 4.20 |
 | `grok-4-1-fast-reasoning` | Grok 4.1 Fast (Reasoning) |
 | `grok-4-1-fast-non-reasoning` | Grok 4.1 Fast |
-| `grok-3-mini` | Grok 3 Mini |
+| `grok-code-fast-1` | Grok Code Fast 1 |
 
 ### OpenRouter (400+ models)
 
@@ -324,10 +328,10 @@ Every method that accepts `$options` supports these parameters:
 |---------|----------|------|
 | Amazon | `amazon/nova-micro-v1` | Nova Micro |
 | Amazon | `amazon/nova-2-lite-v1` | Nova 2 Lite |
-| Anthropic | `anthropic/claude-sonnet-4.5` | Claude Sonnet 4.5 (via OR) |
+| Anthropic | `anthropic/claude-sonnet-4.6` | Claude Sonnet 4.6 (via OR) |
 | ByteDance | `bytedance-seed/seed-1.6` | Seed 1.6 |
 | DeepSeek | `deepseek/deepseek-v3.2` | DeepSeek V3.2 |
-| Google | `google/gemini-3-flash-preview` | Gemini 3 Flash Preview |
+| Google | `google/gemini-3-flash` | Gemini 3 Flash |
 | Google | `google/gemini-2.5-flash` | Gemini 2.5 Flash |
 | Meta | `meta-llama/llama-4-maverick` | Llama 4 Maverick |
 | Meta | `meta-llama/llama-3.3-70b-instruct` | Llama 3.3 70B |
@@ -335,7 +339,7 @@ Every method that accepts `$options` supports these parameters:
 | Mistral | `mistralai/devstral-2512` | Devstral 2512 |
 | Mistral | `mistralai/mistral-small-3.2-24b-instruct` | Mistral Small 3.2 24B |
 | NVIDIA | `nvidia/nemotron-3-nano-30b-a3b` | Nemotron 3 Nano 30B |
-| OpenAI | `openai/gpt-5.2` | GPT-5.2 (via OR) |
+| OpenAI | `openai/gpt-5.4` | GPT-5.4 (via OR) |
 | Qwen (Alibaba) | `qwen/qwen3-max-thinking` | Qwen 3 Max Thinking |
 | Xiaomi | `xiaomi/mimo-v2-flash` | MiMo V2 Flash |
 | xAI | `x-ai/grok-4-1-fast` | Grok 4.1 Fast (via OR) |
@@ -402,7 +406,7 @@ $results = $ai->generate($page, [
         'prompt' => "Write a brief serving guide for {$page->title}. "
                   . "Cover: ideal temperature, glassware, decanting (if applicable), "
                   . "and the best occasion to enjoy it.",
-        'options' => ['provider' => 'google', 'model' => 'gemini-flash-lite-latest', 'maxTokens' => 300],
+        'options' => ['provider' => 'google', 'model' => 'gemini-3.1-flash-lite', 'maxTokens' => 300],
     ],
 ], [
     'cache'       => 'M',
@@ -861,7 +865,7 @@ $wire->addHookBefore('Pages::saveReady', function(HookEvent $event) {
             'maxTokens'   => 100,
             'temperature' => 0,
             'provider'    => 'openai',
-            'model'       => 'gpt-5-nano',
+            'model'       => 'gpt-5.4-nano',
         ]
     );
 
@@ -927,7 +931,7 @@ function translateProducts() {
                 . $product->body,
                 [
                     'provider'    => 'google',
-                    'model'       => 'gemini-flash-latest',
+                    'model'       => 'gemini-3-flash',
                     'maxTokens'   => 2000,
                     'temperature' => 0.2,
                 ]
@@ -1288,7 +1292,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
             'maxTokens'   => 100,
             'temperature' => 0.2,
             'provider'    => 'openai',
-            'model'       => 'gpt-5-nano',
+            'model'       => 'gpt-5.4-nano',
         ]
     );
 
@@ -1631,7 +1635,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
                 'maxTokens'   => 50,
                 'temperature' => 0.3,
                 'provider'    => 'google',
-                'model'       => 'gemini-flash-lite-latest',
+                'model'       => 'gemini-3.1-flash-lite',
             ]
         );
 
@@ -1693,7 +1697,7 @@ $wire->addHookAfter('FormBuilder::processReady', function(HookEvent $event) {
             'maxTokens'   => 100,
             'temperature' => 0,
             'provider'    => 'openai',
-            'model'       => 'gpt-5-nano',
+            'model'       => 'gpt-5.4-nano',
         ]
     );
 
@@ -1764,7 +1768,7 @@ $results = $ai->generate($page, [
         'prompt' => "Write a detailed, engaging overview of {$page->title}...",
         'options' => [
             'provider'    => 'anthropic',
-            'model'       => 'claude-sonnet-4-5-20250929',
+            'model'       => 'claude-sonnet-4-6-20260217',
             'maxTokens'   => 600,
             'temperature' => 0.7,
             'timeout'     => 30,
@@ -1776,7 +1780,7 @@ $results = $ai->generate($page, [
         'prompt' => "Suggest 5 food pairings for {$page->title}...",
         'options' => [
             'provider'    => 'openai',
-            'model'       => 'gpt-4.1-mini',
+            'model'       => 'gpt-5.4-mini',
             'maxTokens'   => 400,
             'temperature' => 0.5,
         ],
@@ -1787,7 +1791,7 @@ $results = $ai->generate($page, [
         'prompt' => "Return 5-8 comma-separated tags for {$page->title}: {$page->parent->title}",
         'options' => [
             'provider'    => 'google',
-            'model'       => 'gemini-flash-lite-latest',
+            'model'       => 'gemini-3.1-flash-lite',
             'maxTokens'   => 50,
             'temperature' => 0,
         ],
@@ -1798,7 +1802,7 @@ $results = $ai->generate($page, [
         'prompt' => "Translate to Spanish:\n{$page->body}",
         'options' => [
             'provider'    => 'google',
-            'model'       => 'gemini-flash-latest',
+            'model'       => 'gemini-3-flash',
             'maxTokens'   => 2000,
             'temperature' => 0.1,
         ],
@@ -2332,7 +2336,7 @@ $suggestions = $ai->ask(
         'maxTokens'   => 150,
         'temperature' => 0.5,
         'provider'    => 'google',
-        'model'       => 'gemini-flash-lite-latest',
+        'model'       => 'gemini-3.1-flash-lite',
     ]
 );
 
@@ -2553,7 +2557,7 @@ $results = $ai->generate($page, [
         'field'  => 'ai_food_pairing',
         'prompt' => "Suggest 5 specific food pairings for {$page->title}. "
                   . "Format as a simple list.",
-        'options' => ['provider' => 'google', 'model' => 'gemini-flash-lite-latest'],
+        'options' => ['provider' => 'google', 'model' => 'gemini-3.1-flash-lite'],
     ],
 ], [
     // Global options — apply to all blocks unless overridden
@@ -2636,7 +2640,7 @@ Enable debug logging in module config for troubleshooting. Disable it in product
 - **Temperature 0** for classification, moderation, data extraction — deterministic output
 - **Temperature 0.3–0.5** for summaries, translations, factual responses
 - **Temperature 0.7–1.0** for creative writing, brainstorming, descriptions
-- Use **`gpt-5-nano`** or **`gemini-flash-lite-latest`** for high-volume, low-cost tasks
+- Use **`gpt-5.4-nano`** or **`gemini-3.1-flash-lite`** for high-volume, low-cost tasks
 - Use **`askWithFallback()`** in production to ensure uptime
 - Set **maxTokens** as low as practical — saves money and speeds up responses
 - Keep **system prompts** focused — shorter prompts mean lower token costs
