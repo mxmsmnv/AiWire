@@ -8,7 +8,7 @@
  *
  * @author Maxim Alex
  * @license MIT
- * @version 1.0.0
+ * @version 1.3.0
  * @see https://github.com/mxmsmnv/AiWire
  */
 
@@ -23,7 +23,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     public static function getModuleInfo() {
         return [
             'title'    => 'AiWire',
-            'version'  => '1.0.0',
+            'version'  => '1.3.0',
             'summary'  => __('AI integration for ProcessWire. Supports Anthropic, OpenAI, Google, xAI, and OpenRouter.'),
             'author'   => 'Maxim Alex',
             'icon'     => 'brain',
@@ -107,7 +107,6 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 'grok-4-1-fast-non-reasoning' => 'Grok 4.1 Fast',
                 'grok-code-fast-1'            => 'Grok Code Fast 1',
             ],
-            ],
         ],
         'openrouter' => [
             'label'       => 'OpenRouter',
@@ -184,6 +183,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     /** @var AiWireCache cache instance */
     protected $cache = null;
 
+    /** @var array|null provider definitions merged with models.json */
+    protected $providerDefinitions = null;
+
     /**
      * Initialize the module
      */
@@ -216,6 +218,96 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         if ($count) {
             $this->log("Cache cleanup: removed {$count} expired files");
         }
+    }
+
+    /**
+     * Get provider definitions with editable model data merged from models.json.
+     */
+    public function getProviderDefinitions(): array {
+        if ($this->providerDefinitions !== null) {
+            return $this->providerDefinitions;
+        }
+
+        $providers = self::PROVIDERS;
+        $modelsFile = __DIR__ . '/models.json';
+
+        if (is_file($modelsFile) && is_readable($modelsFile)) {
+            $decoded = json_decode(file_get_contents($modelsFile), true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $providerKey => $modelConfig) {
+                    if (!isset($providers[$providerKey]) || !is_array($modelConfig)) continue;
+
+                    if (!empty($modelConfig['defaultModel']) && is_string($modelConfig['defaultModel'])) {
+                        $providers[$providerKey]['defaultModel'] = $modelConfig['defaultModel'];
+                    }
+
+                    if (!empty($modelConfig['models']) && is_array($modelConfig['models'])) {
+                        $models = [];
+                        foreach ($modelConfig['models'] as $modelKey => $label) {
+                            $modelKey = trim((string)$modelKey);
+                            if ($modelKey === '') continue;
+                            $models[$modelKey] = trim((string)$label) ?: $modelKey;
+                        }
+                        if ($models) {
+                            $providers[$providerKey]['models'] = $models;
+                        }
+                    }
+                }
+            } else {
+                $this->logError('models.json is invalid: ' . json_last_error_msg());
+            }
+        }
+
+        $this->providerDefinitions = $providers;
+        return $this->providerDefinitions;
+    }
+
+    /**
+     * Get a single provider definition.
+     */
+    protected function getProviderDefinition(string $providerKey): ?array {
+        $providers = $this->getProviderDefinitions();
+        return $providers[$providerKey] ?? null;
+    }
+
+    /**
+     * Encode data for safe use in an HTML attribute.
+     */
+    protected function jsonAttribute(array $data): string {
+        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return htmlspecialchars($json === false ? '{}' : $json, ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Encode data safely for inline JavaScript.
+     */
+    protected function jsonScript($data): string {
+        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        return $json === false ? 'null' : $json;
+    }
+
+    /**
+     * CSRF fields for admin AJAX calls.
+     */
+    protected function getCsrfFields(): array {
+        $csrf = $this->wire('session')->CSRF;
+        return [$csrf->getTokenName() => $csrf->getTokenValue()];
+    }
+
+    protected function getCsrfFieldsJson(): string {
+        return $this->jsonScript($this->getCsrfFields());
+    }
+
+    /**
+     * Resolve env:NAME API key references without storing the secret in module config.
+     */
+    protected function resolveApiKey(string $apiKey): string {
+        if (str_starts_with($apiKey, 'env:')) {
+            $envName = trim(substr($apiKey, 4));
+            return $envName !== '' ? (string)getenv($envName) : '';
+        }
+
+        return $apiKey;
     }
 
     // =========================================================================
@@ -432,9 +524,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      * @return AiWireProvider|null
      */
     public function getProvider(string $providerKey, ?string $specificKey = null, ?int $keyIndex = null): ?AiWireProvider {
-        if (!isset(self::PROVIDERS[$providerKey])) return null;
-
-        $config = self::PROVIDERS[$providerKey];
+        $config = $this->getProviderDefinition($providerKey);
+        if (!$config) return null;
         $keys = $this->getProviderKeys($providerKey);
 
         if ($specificKey) {
@@ -473,7 +564,10 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             }
         }
 
-        $cacheKey = $providerKey . ':' . md5($apiKey);
+        $apiKey = $this->resolveApiKey($apiKey);
+        if ($apiKey === '') return null;
+
+        $cacheKey = $providerKey . ':' . md5($apiKey) . ':' . md5($model);
         if (!isset($this->providerInstances[$cacheKey])) {
             $this->providerInstances[$cacheKey] = new AiWireProvider($providerKey, $config, $apiKey, $model, [
                 'timeout' => (int)$this->timeout,
@@ -491,7 +585,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      */
     public function getProviderKeys(string $providerKey): array {
         $providers = json_decode($this->providers ?: '{}', true) ?: [];
-        return $providers[$providerKey] ?? [];
+        $keys = $providers[$providerKey] ?? [];
+        return is_array($keys) ? $keys : [];
     }
 
     /**
@@ -510,7 +605,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      */
     public function getProvidersStatus(): array {
         $result = [];
-        foreach (self::PROVIDERS as $key => $config) {
+        foreach ($this->getProviderDefinitions() as $key => $config) {
             $keys = $this->getProviderKeys($key);
             $hasActive = false;
             foreach ($keys as $k) {
@@ -607,13 +702,18 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             return false;
         }
 
+        $wasOutputFormatting = $page->of();
         $page->of(false);
         $page->set($fieldName, $text);
 
-        if ($quiet) {
-            $page->save($fieldName, ['quiet' => true]);
-        } else {
-            $page->save($fieldName);
+        try {
+            if ($quiet) {
+                $page->save($fieldName, ['quiet' => true]);
+            } else {
+                $page->save($fieldName);
+            }
+        } finally {
+            $page->of($wasOutputFormatting);
         }
 
         $this->debugLog("saveTo: saved " . mb_strlen($text) . " chars to {$page->id}->{$fieldName}");
@@ -860,10 +960,6 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     // =========================================================================
 
     protected function handleAjaxRequest() {
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_write_close();
-        }
-
         // Prevent PW hooks from corrupting JSON output
         ob_start();
 
@@ -873,6 +969,16 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             ob_end_clean();
             echo json_encode(['success' => false, 'message' => 'Access denied']);
             exit;
+        }
+
+        if (!$this->wire('session')->CSRF->hasValidToken()) {
+            ob_end_clean();
+            echo json_encode(['success' => false, 'message' => 'Invalid CSRF token']);
+            exit;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
         }
 
         $action = $this->wire('input')->post->name('aiwire_action');
@@ -910,11 +1016,16 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             return ['success' => false, 'message' => 'Provider and API key are required'];
         }
 
-        if (!isset(self::PROVIDERS[$providerKey])) {
+        $config = $this->getProviderDefinition($providerKey);
+        if (!$config) {
             return ['success' => false, 'message' => "Unknown provider: {$providerKey}"];
         }
 
-        $config   = self::PROVIDERS[$providerKey];
+        $apiKey = $this->resolveApiKey(trim($apiKey));
+        if ($apiKey === '') {
+            return ['success' => false, 'message' => 'API key is empty or environment variable is not set'];
+        }
+
         $provider = new AiWireProvider($providerKey, $config, $apiKey, $config['defaultModel'], [
             'timeout' => 15,
         ]);
@@ -945,16 +1056,19 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         // Validate structure
         $clean = [];
+        $providerDefinitions = $this->getProviderDefinitions();
         foreach ($decoded as $providerKey => $keys) {
-            if (!isset(self::PROVIDERS[$providerKey])) continue;
+            if (!isset($providerDefinitions[$providerKey])) continue;
+            if (!is_array($keys)) continue;
             $clean[$providerKey] = [];
             foreach ($keys as $k) {
+                if (!is_array($k)) continue;
                 $clean[$providerKey][] = [
-                    'key'     => trim($k['key'] ?? ''),
-                    'label'   => trim($k['label'] ?? ''),
-                    'model'   => trim($k['model'] ?? ''),
+                    'key'     => trim((string)($k['key'] ?? '')),
+                    'label'   => trim((string)($k['label'] ?? '')),
+                    'model'   => trim((string)($k['model'] ?? '')),
                     'enabled' => !empty($k['enabled']),
-                    'status'  => $k['status'] ?? 'unknown',
+                    'status'  => in_array(($k['status'] ?? ''), ['ok', 'fail', 'unknown'], true) ? $k['status'] : 'unknown',
                 ];
             }
         }
@@ -981,7 +1095,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $maxTokens   = $_POST['max_tokens'] ?? null;
         $timeout     = $_POST['timeout'] ?? null;
 
-        if (!$providerKey || !isset(self::PROVIDERS[$providerKey])) {
+        if (!$providerKey || !$this->getProviderDefinition($providerKey)) {
             return ['success' => false, 'message' => 'Invalid provider'];
         }
 
@@ -1021,6 +1135,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      */
     public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
         $modules = $this->wire('modules');
+        $providerDefinitions = $this->getProviderDefinitions();
 
         // ─── Provider Keys Management (main section) ─────────────────────
         $fieldset = $modules->get('InputfieldFieldset');
@@ -1047,7 +1162,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $f->attr('name', 'defaultProvider');
         $f->label = $this->_('Default Provider');
         $f->description = $this->_('Provider to use when none is specified in API calls.');
-        foreach (self::PROVIDERS as $key => $config) {
+        foreach ($providerDefinitions as $key => $config) {
             $f->addOption($key, $config['label']);
         }
         $f->attr('value', $this->defaultProvider ?: 'anthropic');
@@ -1068,7 +1183,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         // Build JS data for all providers and populate current provider's keys
         $keyOptionsData = [];
-        foreach (self::PROVIDERS as $pk => $config) {
+        foreach ($providerDefinitions as $pk => $config) {
             $keys = $providers[$pk] ?? [];
             $keyOptionsData[$pk] = [];
             foreach ($keys as $i => $k) {
@@ -1087,7 +1202,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $fieldset->add($f);
 
         // Store key data for JS (will be output at the end of config form)
-        $this->_keyOptionsJson = json_encode($keyOptionsData);
+        $this->_keyOptionsJson = $this->jsonScript($keyOptionsData);
 
         // System prompt
         $f = $modules->get('InputfieldTextarea');
@@ -1228,11 +1343,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     protected function renderProviderKeysUI(): string {
         $providers = json_decode($this->providers ?: '{}', true) ?: [];
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
-        $providersJson = json_encode(self::PROVIDERS);
-        $savedKeysJson = json_encode($providers);
+        $providersJson = $this->jsonAttribute($this->getProviderDefinitions());
+        $savedKeysJson = $this->jsonAttribute($providers);
+        $moduleUrlAttr = htmlspecialchars($moduleUrl, ENT_QUOTES, 'UTF-8');
+        $csrfFieldsJson = $this->getCsrfFieldsJson();
 
         $html = <<<HTML
-<div id="aiwire-keys-app" data-providers='{$providersJson}' data-saved='{$savedKeysJson}' data-url='{$moduleUrl}'>
+<div id="aiwire-keys-app" data-providers='{$providersJson}' data-saved='{$savedKeysJson}' data-url='{$moduleUrlAttr}'>
     <style>
         #aiwire-keys-app { margin: 10px 0; }
         .aiwire-provider-section {
@@ -1382,6 +1499,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         'use strict';
 
         var container, providers, savedKeys, moduleUrl;
+        var csrfFields = {$csrfFieldsJson};
         var currentKeys = {};
         var dirty = false;
 
@@ -1427,8 +1545,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
             var html = '<div class="aiwire-provider-section" data-provider="' + pk + '">';
             html += '<div class="aiwire-provider-header" onclick="AiWireApp.toggleProvider(\'' + pk + '\')">';
-            html += '  <h4><i class="fa fa-' + config.icon + '"></i> ' + config.label + ' ' + badge + '</h4>';
-            html += '  <div><a href="' + config.docsUrl + '" target="_blank" class="aiwire-docs-link" onclick="event.stopPropagation()"><i class="fa fa-external-link"></i> Docs</a></div>';
+            html += '  <h4><i class="fa fa-' + escAttr(config.icon) + '"></i> ' + escHtml(config.label) + ' ' + badge + '</h4>';
+            html += '  <div><a href="' + escAttr(config.docsUrl) + '" target="_blank" class="aiwire-docs-link" onclick="event.stopPropagation()"><i class="fa fa-external-link"></i> Docs</a></div>';
             html += '</div>';
             html += '<div class="aiwire-provider-body' + collapsed + '" id="aiwire-body-' + pk + '">';
 
@@ -1473,7 +1591,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             var modelOptions = '';
             for (var mk in config.models) {
                 var selected = (keyData.model === mk) ? ' selected' : '';
-                modelOptions += '<option value="' + mk + '"' + selected + '>' + config.models[mk] + '</option>';
+                modelOptions += '<option value="' + escAttr(mk) + '"' + selected + '>' + escHtml(config.models[mk]) + '</option>';
             }
 
             var maskedKey = maskKey(keyData.key);
@@ -1503,6 +1621,10 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             var div = document.createElement('div');
             div.appendChild(document.createTextNode(str));
             return div.innerHTML;
+        }
+
+        function escAttr(str) {
+            return escHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
         function toggleProvider(pk) {
@@ -1571,11 +1693,11 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             jQuery.ajax({
                 url: moduleUrl,
                 type: 'POST',
-                data: {
+                data: Object.assign({}, csrfFields, {
                     aiwire_action: 'test_key',
                     provider: pk,
                     api_key: keyData.key
-                },
+                }),
                 dataType: 'json',
                 timeout: 20000
             })
@@ -1615,10 +1737,10 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             jQuery.ajax({
                 url: moduleUrl,
                 type: 'POST',
-                data: {
+                data: Object.assign({}, csrfFields, {
                     aiwire_action: 'save_keys',
                     keys_data: JSON.stringify(currentKeys)
-                },
+                }),
                 dataType: 'json',
                 timeout: 10000
             })
@@ -1672,10 +1794,13 @@ HTML;
     protected function renderTestChatUI(): string {
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
         $providers = json_decode($this->providers ?: '{}', true) ?: [];
+        $providerDefinitions = $this->getProviderDefinitions();
+        $moduleUrlJs = $this->jsonScript($moduleUrl);
+        $csrfFieldsJson = $this->getCsrfFieldsJson();
 
         // Build provider -> keys mapping for JS
         $providerKeysMap = [];
-        foreach (self::PROVIDERS as $pk => $config) {
+        foreach ($providerDefinitions as $pk => $config) {
             $providerKeysMap[$pk] = [
                 'label'  => $config['label'],
                 'models' => $config['models'],
@@ -1700,9 +1825,10 @@ HTML;
                 }
             }
         }
-        $providerKeysJson = json_encode($providerKeysMap);
+        $providerKeysJson = $this->jsonScript($providerKeysMap);
 
         $defaultProvider = $this->defaultProvider ?: 'anthropic';
+        $defaultProviderJson = $this->jsonScript($defaultProvider);
         $defaultKeyJson = $this->_keyOptionsJson ?? '{}';
 
         return <<<HTML
@@ -1746,7 +1872,9 @@ HTML;
 </div>
 <script>
 var _aiwireTestData = {$providerKeysJson};
-var _aiwireTestDefault = '{$defaultProvider}';
+var _aiwireTestDefault = {$defaultProviderJson};
+var _aiwireTestUrl = {$moduleUrlJs};
+var _aiwireTestCsrf = {$csrfFieldsJson};
 
 function AiWireTestUpdateSelects() {
     var providerSel = document.getElementById('aiwire-test-provider');
@@ -1842,9 +1970,9 @@ function AiWireTestChat() {
     var ajaxTimeout = (parseInt(timeout) || 30) * 1000 + 5000; // server timeout + 5s buffer
 
     jQuery.ajax({
-        url: '{$moduleUrl}',
+        url: _aiwireTestUrl,
         type: 'POST',
-        data: {
+        data: Object.assign({}, _aiwireTestCsrf, {
             aiwire_action: 'test_chat',
             provider: provider,
             key_index: keyIndex,
@@ -1853,7 +1981,7 @@ function AiWireTestChat() {
             temperature: temperature,
             max_tokens: maxTokens,
             timeout: timeout
-        },
+        }),
         dataType: 'json',
         timeout: ajaxTimeout
     })
@@ -1922,6 +2050,8 @@ HTML;
     protected function renderCacheUI(): string {
         $stats = $this->cache->getStats();
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
+        $moduleUrlJs = $this->jsonScript($moduleUrl);
+        $csrfFieldsJson = $this->getCsrfFieldsJson();
 
         $sizeFormatted = $this->formatBytes($stats['total_size']);
 
@@ -1941,6 +2071,8 @@ HTML;
     </div>
 </div>
 <script>
+var _aiwireCacheUrl = {$moduleUrlJs};
+var _aiwireCacheCsrf = {$csrfFieldsJson};
 function AiWireClearCache() {
     if (!confirm('Clear all AiWire cached responses?')) return;
     var btn = document.getElementById('aiwire-clear-cache-btn');
@@ -1948,9 +2080,9 @@ function AiWireClearCache() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Clearing...';
     jQuery.ajax({
-        url: '{$moduleUrl}',
+        url: _aiwireCacheUrl,
         type: 'POST',
-        data: { aiwire_action: 'clear_cache' },
+        data: Object.assign({}, _aiwireCacheCsrf, { aiwire_action: 'clear_cache' }),
         dataType: 'json',
         timeout: 10000
     })

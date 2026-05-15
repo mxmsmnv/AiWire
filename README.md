@@ -44,10 +44,33 @@ site/modules/AiWire/
 ├── AiWire.module.php       # Main module
 ├── AiWireProvider.php       # API client for all providers
 ├── AiWireCache.php          # File-based cache system
+├── models.json              # Editable provider model list
 ├── README.md                # This file
 ├── DOCUMENTATION.md         # Full API reference + 25 examples
 └── LICENSE
 ```
+
+### Updating Models
+
+Provider model IDs and labels are loaded from `models.json`. Edit that file when a provider adds, renames, or retires a model:
+
+```json
+{
+  "openai": {
+    "defaultModel": "gpt-5.4",
+    "models": {
+      "gpt-5.4": "GPT-5.4",
+      "gpt-5.4-mini": "GPT-5.4 Mini"
+    }
+  }
+}
+```
+
+If `models.json` is missing or invalid, AiWire falls back to the built-in model list.
+
+### API Key Storage
+
+Keys can be stored directly in the module settings, or as environment references such as `env:OPENAI_API_KEY`. Environment references avoid saving the real secret in ProcessWire module config.
 
 ### Getting API Keys
 
@@ -151,7 +174,9 @@ $results = $ai->generate($page, [
 
 ---
 
-## Supported Models (April 2026)
+## Supported Models
+
+The default editable list in `models.json` currently includes:
 
 | Provider | Models |
 |----------|--------|

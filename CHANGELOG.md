@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [1.3.0] — 2026-05-15
+
+### Added
+- Added `models.json` as an editable provider model catalog so model IDs, labels, and defaults can be updated without changing module PHP code.
+- Added support for API key references like `env:OPENAI_API_KEY` to avoid storing real secrets in ProcessWire module config.
+
+### Fixed
+- Fixed a PHP parse error in the xAI provider definition that prevented the module from loading.
+- Added CSRF validation to AiWire admin AJAX actions.
+- Escaped JSON embedded in admin HTML and JavaScript to avoid broken markup and reduce XSS risk.
+- Included model in cached provider instances so the same key can be used with different selected models safely.
+- Restored a page's previous output formatting state after `saveTo()`.
+
+---
+
 ## [1.2.0] — 2026-04-23
 
 ### Changed
