@@ -8,7 +8,7 @@
  *
  * @author Maxim Alex
  * @license MIT
- * @version 1.3.0
+ * @version 1.4.0
  * @see https://github.com/mxmsmnv/AiWire
  */
 
@@ -23,7 +23,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     public static function getModuleInfo() {
         return [
             'title'    => 'AiWire',
-            'version'  => '1.3.0',
+            'version'  => '1.4.0',
             'summary'  => __('AI integration for ProcessWire. Supports Anthropic, OpenAI, Google, xAI, and OpenRouter.'),
             'author'   => 'Maxim Alex',
             'icon'     => 'brain',
@@ -163,6 +163,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      */
     protected static $defaultConfig = [
         'providers'          => '{}', // JSON: {provider: [{key, label, model, enabled, status}]}
+        'providerModels'     => '{}', // JSON: {provider: {updated, models}}
         'defaultProvider'    => 'anthropic',
         'defaultKeyIndex'    => '',
         'defaultModel'       => '',
@@ -268,6 +269,87 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     protected function getProviderDefinition(string $providerKey): ?array {
         $providers = $this->getProviderDefinitions();
         return $providers[$providerKey] ?? null;
+    }
+
+    /**
+     * Get known models for a provider, preferring refreshed models over defaults.
+     */
+    public function getProviderModels(string $providerKey): array {
+        $refreshed = json_decode($this->providerModels ?: '{}', true) ?: [];
+        $models = $refreshed[$providerKey]['models'] ?? [];
+
+        if (is_array($models) && $models) {
+            return $models;
+        }
+
+        $config = $this->getProviderDefinition($providerKey);
+        return is_array($config['models'] ?? null) ? $config['models'] : [];
+    }
+
+    /**
+     * Get timestamp metadata for a refreshed provider model list.
+     */
+    public function getProviderModelsUpdated(string $providerKey): string {
+        $refreshed = json_decode($this->providerModels ?: '{}', true) ?: [];
+        return (string)($refreshed[$providerKey]['updated'] ?? '');
+    }
+
+    /**
+     * Refresh provider models and store them in module config.
+     */
+    public function refreshProviderModels(string $providerKey, ?string $apiKey = null, ?int $keyIndex = null): array {
+        $config = $this->getProviderDefinition($providerKey);
+        if (!$config) {
+            return ['success' => false, 'models' => [], 'message' => "Unknown provider: {$providerKey}"];
+        }
+
+        if ($apiKey === null && $keyIndex !== null) {
+            $keys = $this->getProviderKeys($providerKey);
+            $apiKey = $keys[$keyIndex]['key'] ?? null;
+        }
+
+        if ($apiKey === null || trim($apiKey) === '') {
+            $provider = $this->getProvider($providerKey);
+        } else {
+            $resolvedKey = $this->resolveApiKey(trim($apiKey));
+            if ($resolvedKey === '') {
+                return ['success' => false, 'models' => [], 'message' => 'API key is empty or environment variable is not set'];
+            }
+            $provider = new AiWireProvider($providerKey, $config, $resolvedKey, $config['defaultModel'], [
+                'timeout' => (int)$this->timeout,
+            ]);
+        }
+
+        if (!$provider) {
+            return ['success' => false, 'models' => [], 'message' => "No active provider found for '{$providerKey}'"];
+        }
+
+        $result = $provider->fetchModels();
+        if (empty($result['success']) || empty($result['models']) || !is_array($result['models'])) {
+            return [
+                'success' => false,
+                'models'  => [],
+                'message' => $result['message'] ?? 'Could not fetch models from provider.',
+            ];
+        }
+
+        $providerModels = json_decode($this->providerModels ?: '{}', true) ?: [];
+        $providerModels[$providerKey] = [
+            'updated' => date('Y-m-d H:i:s'),
+            'models'  => $result['models'],
+        ];
+
+        $configData = $this->wire('modules')->getModuleConfigData($this);
+        $configData['providerModels'] = json_encode($providerModels, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $this->wire('modules')->saveModuleConfigData($this, $configData);
+        $this->set('providerModels', $configData['providerModels']);
+
+        return [
+            'success' => true,
+            'models'  => $result['models'],
+            'updated' => $providerModels[$providerKey]['updated'],
+            'message' => 'Models refreshed.',
+        ];
     }
 
     /**
@@ -467,7 +549,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             $keyOptions['provider'] = $providerKey;
             $keyOptions['key'] = $keyData['key'];
             if (!isset($keyOptions['model'])) {
-                $keyOptions['model'] = $keyData['model'] ?? null;
+                $keyOptions['model'] = trim((string)($keyData['custom_model'] ?? ''))
+                    ?: trim((string)($keyData['model'] ?? ''))
+                    ?: null;
             }
 
             $result = $this->ask($message, $keyOptions);
@@ -533,7 +617,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             $model  = $config['defaultModel'];
         } elseif ($keyIndex !== null && isset($keys[$keyIndex])) {
             $apiKey = $keys[$keyIndex]['key'] ?? '';
-            $model  = $keys[$keyIndex]['model'] ?? $config['defaultModel'];
+            $model  = trim((string)($keys[$keyIndex]['custom_model'] ?? ''))
+                ?: trim((string)($keys[$keyIndex]['model'] ?? ''))
+                ?: $config['defaultModel'];
             if (!$apiKey) return null;
         } else {
             // Use default key index if set for this provider
@@ -542,7 +628,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 $idx = (int)$defaultIdx;
                 if (isset($keys[$idx]) && !empty($keys[$idx]['enabled']) && !empty($keys[$idx]['key'])) {
                     $apiKey = $keys[$idx]['key'];
-                    $model  = $keys[$idx]['model'] ?? $config['defaultModel'];
+                    $model  = trim((string)($keys[$idx]['custom_model'] ?? ''))
+                        ?: trim((string)($keys[$idx]['model'] ?? ''))
+                        ?: $config['defaultModel'];
                 } else {
                     // Fallback to first enabled
                     $defaultIdx = '';
@@ -560,7 +648,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 }
                 if (!$activeKey) return null;
                 $apiKey = $activeKey['key'];
-                $model  = $activeKey['model'] ?? $config['defaultModel'];
+                $model  = trim((string)($activeKey['custom_model'] ?? ''))
+                    ?: trim((string)($activeKey['model'] ?? ''))
+                    ?: $config['defaultModel'];
             }
         }
 
@@ -994,6 +1084,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             case 'test_chat':
                 $result = $this->ajaxTestChat();
                 break;
+            case 'refresh_models':
+                $result = $this->ajaxRefreshModels();
+                break;
             case 'clear_cache':
                 $count = $this->clearAllCache();
                 $result = ['success' => true, 'message' => "Cleared {$count} cached files"];
@@ -1067,6 +1160,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                     'key'     => trim((string)($k['key'] ?? '')),
                     'label'   => trim((string)($k['label'] ?? '')),
                     'model'   => trim((string)($k['model'] ?? '')),
+                    'custom_model' => trim((string)($k['custom_model'] ?? '')),
                     'enabled' => !empty($k['enabled']),
                     'status'  => in_array(($k['status'] ?? ''), ['ok', 'fail', 'unknown'], true) ? $k['status'] : 'unknown',
                 ];
@@ -1106,7 +1200,11 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         if ($keyIndex !== null && $keyIndex !== '' && isset($keys[(int)$keyIndex])) {
             $keyData = $keys[(int)$keyIndex];
             $specificKey = $keyData['key'] ?? null;
-            if (!$model) $model = $keyData['model'] ?? null;
+            if (!$model) {
+                $model = trim((string)($keyData['custom_model'] ?? ''))
+                    ?: trim((string)($keyData['model'] ?? ''))
+                    ?: null;
+            }
         }
 
         $options = ['provider' => $providerKey];
@@ -1124,6 +1222,22 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         return $result;
+    }
+
+    /**
+     * Refresh provider model list via AJAX.
+     */
+    protected function ajaxRefreshModels(): array {
+        $providerKey = $this->wire('input')->post->name('provider');
+        $keyIndex = $_POST['key_index'] ?? null;
+        $apiKey = $_POST['api_key'] ?? null;
+
+        if (!$providerKey || !$this->getProviderDefinition($providerKey)) {
+            return ['success' => false, 'models' => [], 'message' => 'Invalid provider'];
+        }
+
+        $keyIndex = ($keyIndex !== null && $keyIndex !== '') ? (int)$keyIndex : null;
+        return $this->refreshProviderModels($providerKey, $apiKey ?: null, $keyIndex);
     }
 
     // =========================================================================
@@ -1334,6 +1448,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $f->attr('value', $this->providers ?: '{}');
         $inputfields->add($f);
 
+        // Hidden field for refreshed provider model JSON data
+        $f = $modules->get('InputfieldHidden');
+        $f->attr('name', 'providerModels');
+        $f->attr('id', 'aiwire-provider-models-data');
+        $f->attr('value', $this->providerModels ?: '{}');
+        $inputfields->add($f);
+
         return $inputfields;
     }
 
@@ -1343,7 +1464,15 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     protected function renderProviderKeysUI(): string {
         $providers = json_decode($this->providers ?: '{}', true) ?: [];
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
-        $providersJson = $this->jsonAttribute($this->getProviderDefinitions());
+        $providerDefinitions = $this->getProviderDefinitions();
+        foreach ($providerDefinitions as $pk => &$config) {
+            $config['models'] = $this->getProviderModels($pk);
+            $config['modelsUpdated'] = $this->getProviderModelsUpdated($pk);
+            $config['canRefreshModels'] = in_array($pk, ['openai', 'openrouter'], true);
+        }
+        unset($config);
+
+        $providersJson = $this->jsonAttribute($providerDefinitions);
         $savedKeysJson = $this->jsonAttribute($providers);
         $moduleUrlAttr = htmlspecialchars($moduleUrl, ENT_QUOTES, 'UTF-8');
         $csrfFieldsJson = $this->getCsrfFieldsJson();
@@ -1415,6 +1544,14 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             padding: 6px 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
+            font-size: 13px;
+        }
+        .aiwire-custom-model-input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
             font-size: 13px;
         }
         .aiwire-model-select {
@@ -1589,12 +1726,22 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
             // Model options
             var modelOptions = '';
+            var selectedModel = keyData.model || config.defaultModel;
+            var hasSelectedModel = false;
             for (var mk in config.models) {
-                var selected = (keyData.model === mk) ? ' selected' : '';
+                var selected = (selectedModel === mk) ? ' selected' : '';
+                if (selected) hasSelectedModel = true;
                 modelOptions += '<option value="' + escAttr(mk) + '"' + selected + '>' + escHtml(config.models[mk]) + '</option>';
+            }
+            if (selectedModel && !hasSelectedModel) {
+                modelOptions = '<option value="' + escAttr(selectedModel) + '" selected>' + escHtml(selectedModel) + '</option>' + modelOptions;
             }
 
             var maskedKey = maskKey(keyData.key);
+            var refreshButton = '';
+            if (config.canRefreshModels) {
+                refreshButton = '<button type="button" class="aiwire-btn" title="Refresh models" onclick="AiWireApp.refreshModels(\'' + pk + '\',' + index + ')"><i class="fa fa-refresh"></i></button>';
+            }
 
             var html = '<div class="aiwire-key-row" id="aiwire-row-' + pk + '-' + index + '">';
             html += '<span class="aiwire-enabled-toggle" title="' + enabledTitle + '" onclick="AiWireApp.toggleEnabled(\'' + pk + '\',' + index + ')">';
@@ -1604,7 +1751,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             html += '<input type="text" class="aiwire-label-input" placeholder="Label (optional)" value="' + escHtml(keyData.label || '') + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'label\',this.value)" />';
             html += '<input type="password" class="aiwire-key-input" placeholder="API Key" value="' + escHtml(keyData.key) + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'key\',this.value)" />';
             html += '<select class="aiwire-model-select" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'model\',this.value)">' + modelOptions + '</select>';
+            html += '<input type="text" class="aiwire-custom-model-input" placeholder="Custom model (optional)" value="' + escHtml(keyData.custom_model || '') + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'custom_model\',this.value)" />';
             html += '<div class="aiwire-key-actions">';
+            html += refreshButton;
             html += '  <button type="button" class="aiwire-btn" title="Test this key" onclick="AiWireApp.testKey(\'' + pk + '\',' + index + ')"><i class="fa fa-plug"></i></button>';
             html += '  <button type="button" class="aiwire-btn aiwire-btn-danger" title="Remove" onclick="AiWireApp.removeKey(\'' + pk + '\',' + index + ')"><i class="fa fa-trash"></i></button>';
             html += '</div>';
@@ -1638,6 +1787,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 key: '',
                 label: '',
                 model: providers[pk].defaultModel,
+                custom_model: '',
                 enabled: true,
                 status: 'unknown'
             });
@@ -1715,6 +1865,42 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             });
         }
 
+        function refreshModels(pk, index) {
+            var keyData = currentKeys[pk][index];
+            if (!keyData || !keyData.key) {
+                alert('Please enter an API key first.');
+                return;
+            }
+
+            jQuery.ajax({
+                url: moduleUrl,
+                type: 'POST',
+                data: Object.assign({}, csrfFields, {
+                    aiwire_action: 'refresh_models',
+                    provider: pk,
+                    key_index: index,
+                    api_key: keyData.key
+                }),
+                dataType: 'json',
+                timeout: 30000
+            })
+            .done(function(response) {
+                if (!response.success) {
+                    alert(response.message || 'Could not refresh models.');
+                    return;
+                }
+
+                providers[pk].models = response.models || {};
+                providers[pk].modelsUpdated = response.updated || '';
+                syncProviderModelsField(pk, response.models || {}, response.updated || '');
+                render();
+                alert(response.message || 'Models refreshed.');
+            })
+            .fail(function(xhr, status) {
+                alert('Model refresh failed: ' + status);
+            });
+        }
+
         function setDirty() {
             dirty = true;
             var bar = document.getElementById('aiwire-save-bar');
@@ -1726,6 +1912,20 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         function syncHiddenField() {
             var hidden = document.getElementById('aiwire-providers-data');
             if (hidden) hidden.value = JSON.stringify(currentKeys);
+        }
+
+        function syncProviderModelsField(pk, models, updated) {
+            var hidden = document.getElementById('aiwire-provider-models-data');
+            if (!hidden) return;
+
+            var data = {};
+            try {
+                data = JSON.parse(hidden.value || '{}');
+            } catch (e) {
+                data = {};
+            }
+            data[pk] = { updated: updated, models: models };
+            hidden.value = JSON.stringify(data);
         }
 
         function saveAll() {
@@ -1778,6 +1978,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             updateKey: updateKey,
             toggleEnabled: toggleEnabled,
             testKey: testKey,
+            refreshModels: refreshModels,
             saveAll: saveAll
         };
     })();
@@ -1803,7 +2004,7 @@ HTML;
         foreach ($providerDefinitions as $pk => $config) {
             $providerKeysMap[$pk] = [
                 'label'  => $config['label'],
-                'models' => $config['models'],
+                'models' => $this->getProviderModels($pk),
                 'defaultModel' => $config['defaultModel'],
                 'keys'   => [],
             ];
@@ -1816,7 +2017,9 @@ HTML;
                     } else {
                         $displayLabel = 'Key #' . ($i + 1) . ' (' . $maskedKey . ')';
                     }
-                    $model = $k['model'] ?? $config['defaultModel'];
+                    $model = trim((string)($k['custom_model'] ?? ''))
+                        ?: trim((string)($k['model'] ?? ''))
+                        ?: $config['defaultModel'];
                     $providerKeysMap[$pk]['keys'][] = [
                         'index'  => $i,
                         'label'  => $displayLabel,

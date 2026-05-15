@@ -68,6 +68,10 @@ Provider model IDs and labels are loaded from `models.json`. Edit that file when
 
 If `models.json` is missing or invalid, AiWire falls back to the built-in model list.
 
+OpenAI and OpenRouter also support model refresh from the module settings. Refreshed models are stored in module config separately from `models.json` and are used first; if no refreshed list exists, AiWire falls back to `models.json`, then to built-in defaults.
+
+Each API key can also define a custom model. The custom model value is optional, but when present it overrides the selected model for that key. This is useful for private, preview, account-gated, proxy, or newly released model IDs.
+
 ### API Key Storage
 
 Keys can be stored directly in the module settings, or as environment references such as `env:OPENAI_API_KEY`. Environment references avoid saving the real secret in ProcessWire module config.

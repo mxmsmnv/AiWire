@@ -51,6 +51,27 @@ class AiWireProvider {
     }
 
     /**
+     * Fetch available models from providers that expose a simple list endpoint.
+     *
+     * @return array ['success' => bool, 'models' => array, 'message' => string]
+     */
+    public function fetchModels(): array {
+        if ($this->providerKey === 'openai') {
+            return $this->fetchOpenAIModels();
+        }
+
+        if ($this->providerKey === 'openrouter') {
+            return $this->fetchOpenRouterModels();
+        }
+
+        return [
+            'success' => false,
+            'models'  => [],
+            'message' => 'Model refresh is not implemented for this provider.',
+        ];
+    }
+
+    /**
      * Test connection by sending a minimal request
      *
      * @return array ['success' => bool, 'message' => string]
@@ -377,6 +398,131 @@ class AiWireProvider {
         return [
             'success'  => true,
             'data'     => $data,
+            'message'  => 'OK',
+            'httpCode' => $httpCode,
+        ];
+    }
+
+    /**
+     * Fetch OpenAI model IDs.
+     */
+    protected function fetchOpenAIModels(): array {
+        $response = $this->curlGetRequest('https://api.openai.com/v1/models', [
+            'Authorization: Bearer ' . $this->apiKey,
+        ]);
+
+        if (!$response['success']) return $response + ['models' => []];
+
+        $models = [];
+        foreach (($response['data']['data'] ?? []) as $model) {
+            $id = trim((string)($model['id'] ?? ''));
+            if ($id === '') continue;
+            $models[$id] = $id;
+        }
+
+        ksort($models, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return [
+            'success' => !empty($models),
+            'models'  => $models,
+            'message' => $models ? 'Models refreshed.' : 'No models returned by OpenAI.',
+            'raw'     => $response['data'],
+        ];
+    }
+
+    /**
+     * Fetch OpenRouter model IDs.
+     */
+    protected function fetchOpenRouterModels(): array {
+        $response = $this->curlGetRequest('https://openrouter.ai/api/v1/models', [
+            'Authorization: Bearer ' . $this->apiKey,
+        ]);
+
+        if (!$response['success']) return $response + ['models' => []];
+
+        $models = [];
+        foreach (($response['data']['data'] ?? []) as $model) {
+            $id = trim((string)($model['id'] ?? ''));
+            if ($id === '') continue;
+            $name = trim((string)($model['name'] ?? ''));
+            $models[$id] = $name !== '' ? $name : $id;
+        }
+
+        ksort($models, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return [
+            'success' => !empty($models),
+            'models'  => $models,
+            'message' => $models ? 'Models refreshed.' : 'No models returned by OpenRouter.',
+            'raw'     => $response['data'],
+        ];
+    }
+
+    /**
+     * Make a GET request.
+     *
+     * @return array ['success', 'data', 'message', 'httpCode']
+     */
+    protected function curlGetRequest(string $url, array $headers): array {
+        $ch = curl_init();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_HTTPGET        => true,
+            CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json'], $headers),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => $this->options['timeout'],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+
+        $responseBody = curl_exec($ch);
+        $httpCode     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error        = curl_error($ch);
+        $errno        = curl_errno($ch);
+
+        curl_close($ch);
+
+        if ($errno) {
+            return [
+                'success'  => false,
+                'data'     => [],
+                'message'  => "cURL error ({$errno}): {$error}",
+                'httpCode' => 0,
+            ];
+        }
+
+        $data = json_decode($responseBody, true);
+
+        if ($data === null && $responseBody !== '') {
+            return [
+                'success'  => false,
+                'data'     => [],
+                'message'  => "Invalid JSON response (HTTP {$httpCode})",
+                'httpCode' => $httpCode,
+            ];
+        }
+
+        if ($httpCode >= 400) {
+            $errorMsg = 'HTTP ' . $httpCode;
+            if (isset($data['error']['message'])) {
+                $errorMsg .= ': ' . $data['error']['message'];
+            } elseif (isset($data['error']) && is_string($data['error'])) {
+                $errorMsg .= ': ' . $data['error'];
+            }
+
+            return [
+                'success'  => false,
+                'data'     => $data ?: [],
+                'message'  => $errorMsg,
+                'httpCode' => $httpCode,
+            ];
+        }
+
+        return [
+            'success'  => true,
+            'data'     => $data ?: [],
             'message'  => 'OK',
             'httpCode' => $httpCode,
         ];

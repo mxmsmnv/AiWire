@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [1.4.0] — 2026-05-15
+
+### Added
+- Added dynamic model refresh support for OpenAI and OpenRouter from the admin provider key UI.
+- Added `providerModels` config storage for refreshed model lists, separate from static defaults and `models.json`.
+- Added per-key `custom_model` support so users can enter private, preview, proxy, or newly released model IDs manually.
+- Added public helpers `getProviderModels()` and `refreshProviderModels()`.
+
+### Changed
+- Model dropdowns now prefer refreshed provider models, then `models.json`, then built-in defaults.
+- Runtime model resolution now prefers per-request `model`, then per-key `custom_model`, then selected key model, then provider default.
+
+---
+
 ## [1.3.0] — 2026-05-15
 
 ### Added
