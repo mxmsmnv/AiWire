@@ -8,6 +8,8 @@ Manage multiple API keys per provider, test connections from admin, and use AI i
 
 ---
 
+If this project helps your work, consider supporting future development: [GitHub Sponsors](https://github.com/sponsors/mxmsmnv) or [smnv.org/sponsor](https://smnv.org/sponsor/).  
+
 ## Features
 
 - **5 providers** — Anthropic, OpenAI, Google, xAI, OpenRouter
