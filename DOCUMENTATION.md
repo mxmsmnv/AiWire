@@ -2656,7 +2656,7 @@ MIT — free for personal and commercial use.
 
 ## Author
 
-**Maxim Alex** — [smnv.org](https://smnv.org) — maxim@smnv.org
+**Maxim Semenov** — [smnv.org](https://smnv.org) — maxim@smnv.org
 
 Built for the [ProcessWire](https://processwire.com/) community.
 

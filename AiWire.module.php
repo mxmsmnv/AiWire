@@ -6,7 +6,7 @@
  * Connect your ProcessWire site to AI providers: Anthropic, OpenAI, Google, xAI, OpenRouter.
  * Manage multiple API keys, test connections, and use AI in your templates.
  *
- * @author Maxim Alex
+ * @author Maxim Semenov <maxim@smnv.org> (smnv.org)
  * @license MIT
  * @version 1.4.0
  * @see https://github.com/mxmsmnv/AiWire
@@ -25,7 +25,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             'title'    => 'AiWire',
             'version'  => '1.4.0',
             'summary'  => __('AI integration for ProcessWire. Supports Anthropic, OpenAI, Google, xAI, and OpenRouter.'),
-            'author'   => 'Maxim Alex',
+            'author'   => 'Maxim Semenov',
+            'href'     => 'https://smnv.org',
             'icon'     => 'brain',
             'singular' => true,
             'autoload' => true,

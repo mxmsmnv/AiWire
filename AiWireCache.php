@@ -17,7 +17,7 @@
  *   └── 1085/
  *       └── c0d1e2.json
  *
- * @author Maxim Alex
+ * @author Maxim Semenov <maxim@smnv.org> (smnv.org)
  * @license MIT
  */
 

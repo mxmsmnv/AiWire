@@ -5,7 +5,7 @@
  *
  * Supports Anthropic (Claude), OpenAI (GPT), xAI (Grok), and OpenRouter.
  *
- * @author Maxim Alex
+ * @author Maxim Semenov <maxim@smnv.org> (smnv.org)
  * @license MIT
  */
 
