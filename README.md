@@ -2,6 +2,8 @@
 
 Connect your ProcessWire site to AI providers: **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **xAI (Grok)**, and **OpenRouter** (400+ models).
 
+![AiWire](assets/AiWire.png)
+
 Manage multiple API keys per provider, test connections from admin, and use AI in your templates with a clean PHP API.
 
 > **📖 Full documentation with 25 real-world examples → [DOCUMENTATION.md](DOCUMENTATION.md)**
