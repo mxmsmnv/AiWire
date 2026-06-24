@@ -14,6 +14,7 @@
 
 require_once(__DIR__ . '/AiWireProvider.php');
 require_once(__DIR__ . '/AiWireCache.php');
+require_once(__DIR__ . '/AiWireKeys.php');
 
 class AiWire extends WireData implements Module, ConfigurableModule {
 
@@ -23,7 +24,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     public static function getModuleInfo() {
         return [
             'title'    => 'AiWire',
-            'version'  => '1.4.0',
+            'version'  => '1.5.0',
             'summary'  => __('AI integration for ProcessWire. Supports Anthropic, OpenAI, Google, xAI, and OpenRouter.'),
             'author'   => 'Maxim Semenov',
             'href'     => 'https://smnv.org',
@@ -211,6 +212,29 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         // Initialize cache
         $this->cache = new AiWireCache(null, !empty($this->enableDebugLogging));
+    }
+
+    /**
+     * Install — create the encrypted key table.
+     */
+    public function ___install() {
+        $this->keys()->ensureTable();
+    }
+
+    /**
+     * Upgrade — ensure the key table exists and migrate any plaintext keys from
+     * the legacy `providers` config JSON into encrypted storage.
+     */
+    public function ___upgrade($fromVersion, $toVersion) {
+        $this->keys()->ensureTable();
+        $this->migrateKeysToTable();
+    }
+
+    /**
+     * Uninstall — drop the encrypted key table.
+     */
+    public function ___uninstall() {
+        $this->keys()->dropTable();
     }
 
     /**
@@ -814,9 +838,68 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      * @return array
      */
     public function getProviderKeys(string $providerKey): array {
+        // Encrypted table is the source of truth once any key has been migrated;
+        // fall back to the legacy `providers` config JSON during the transition.
+        $store = $this->keys();
+        if ($store->hasAny()) {
+            return $store->getProviderKeys($providerKey);
+        }
         $providers = json_decode($this->providers ?: '{}', true) ?: [];
         $keys = $providers[$providerKey] ?? [];
         return is_array($keys) ? $keys : [];
+    }
+
+    /**
+     * All providers' keys as a map {providerKey: [keyEntry, ...]} — decrypted.
+     * Table-first with legacy-config fallback, mirroring getProviderKeys().
+     */
+    public function getAllProviderKeys(): array {
+        $store = $this->keys();
+        if ($store->hasAny()) {
+            $out = [];
+            foreach (array_keys($this->getProviderDefinitions()) as $pk) {
+                $rows = $store->getProviderKeys($pk);
+                if ($rows) $out[$pk] = $rows;
+            }
+            return $out;
+        }
+        return json_decode($this->providers ?: '{}', true) ?: [];
+    }
+
+    /** Lazily-built encrypted key store. */
+    protected function keys(): AiWireKeys {
+        if ($this->keyStore === null) $this->keyStore = $this->wire(new AiWireKeys());
+        return $this->keyStore;
+    }
+
+    /** @var AiWireKeys|null */
+    protected $keyStore = null;
+
+    /**
+     * Move any provider keys still living in the `providers` config JSON into the
+     * encrypted table, then blank the plaintext in config. Idempotent and
+     * non-destructive: a key's plaintext is only cleared after it's encrypted.
+     * No-op when the config field is already empty. Returns keys migrated.
+     */
+    public function migrateKeysToTable(): int {
+        $decoded = json_decode($this->providers ?: '{}', true);
+        if (!is_array($decoded) || !$decoded) return 0;
+
+        $store = $this->keys();
+        $moved = 0;
+        foreach ($decoded as $pk => $entries) {
+            if (!is_array($entries)) continue;
+            $moved += $store->replaceProvider($pk, $entries);
+        }
+
+        // clear plaintext from config now that it's encrypted in the table
+        $configData = $this->wire('modules')->getModuleConfigData($this);
+        $configData['providers'] = '{}';
+        $this->wire('modules')->saveModuleConfigData($this, $configData);
+        $this->providers = '{}';
+
+        if ($moved) $this->log("Migrated {$moved} provider key(s) to encrypted table");
+        return $moved;
     }
 
     /**
@@ -1307,12 +1390,18 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             }
         }
 
-        // Save to module config
+        // Save into the encrypted table (source of truth), and keep the legacy
+        // config field blank so no plaintext key ever lands in the DB / a dump.
+        $store = $this->keys();
+        foreach ($clean as $providerKey => $keys) {
+            $store->replaceProvider($providerKey, $keys);
+        }
         $configData = $this->wire('modules')->getModuleConfigData($this);
-        $configData['providers'] = json_encode($clean);
+        $configData['providers'] = '{}';
         $this->wire('modules')->saveModuleConfigData($this, $configData);
+        $this->providers = '{}';
 
-        $this->log("Provider keys updated");
+        $this->log("Provider keys updated (encrypted store)");
 
         return ['success' => true, 'message' => 'Keys saved successfully'];
     }
@@ -1391,6 +1480,10 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $modules = $this->wire('modules');
         $providerDefinitions = $this->getProviderDefinitions();
 
+        // Sweep any plaintext keys left in the config field into the encrypted
+        // table (no-op once clean), so the form always edits from encrypted store.
+        $this->migrateKeysToTable();
+
         // ─── Provider Keys Management (main section) ─────────────────────
         $fieldset = $modules->get('InputfieldFieldset');
         $fieldset->label = $this->_('API Keys & Providers');
@@ -1431,7 +1524,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $f->columnWidth = 50;
         $f->addOption('', $this->_('— First active key —'));
 
-        $providers = json_decode($this->providers ?: '{}', true) ?: [];
+        $providers = $this->getAllProviderKeys();
         $currentDefaultProvider = $this->defaultProvider ?: 'anthropic';
         $currentDefaultKey = $this->defaultKeyIndex ?? '';
 
@@ -1581,11 +1674,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         $inputfields->add($fieldset);
 
-        // Hidden field for providers JSON data
+        // Hidden field for providers JSON data. Kept empty on purpose: keys are
+        // persisted only via "Save All Keys" → the encrypted table, so a normal
+        // config-form submit never writes plaintext keys back into module config.
         $f = $modules->get('InputfieldHidden');
         $f->attr('name', 'providers');
         $f->attr('id', 'aiwire-providers-data');
-        $f->attr('value', $this->providers ?: '{}');
+        $f->attr('value', '{}');
         $inputfields->add($f);
 
         // Hidden field for refreshed provider model JSON data
@@ -1602,7 +1697,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      * Render the provider keys management UI
      */
     protected function renderProviderKeysUI(): string {
-        $providers = json_decode($this->providers ?: '{}', true) ?: [];
+        $providers = $this->getAllProviderKeys();
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
         $providerDefinitions = $this->getProviderDefinitions();
         foreach ($providerDefinitions as $pk => &$config) {
@@ -2050,8 +2145,10 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         function syncHiddenField() {
+            // Keys are saved via "Save All Keys" → encrypted table; never write
+            // them into the config form field (would persist plaintext in the DB).
             var hidden = document.getElementById('aiwire-providers-data');
-            if (hidden) hidden.value = JSON.stringify(currentKeys);
+            if (hidden) hidden.value = '{}';
         }
 
         function syncProviderModelsField(pk, models, updated) {
@@ -2134,7 +2231,7 @@ HTML;
      */
     protected function renderTestChatUI(): string {
         $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
-        $providers = json_decode($this->providers ?: '{}', true) ?: [];
+        $providers = $this->getAllProviderKeys();
         $providerDefinitions = $this->getProviderDefinitions();
         $moduleUrlJs = $this->jsonScript($moduleUrl);
         $csrfFieldsJson = $this->getCsrfFieldsJson();
