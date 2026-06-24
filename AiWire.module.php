@@ -600,8 +600,11 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 return ['success' => true, 'content' => $res['content'], 'steps' => $steps, 'messages' => $messages, 'usage' => $res['usage'] ?? [], 'message' => 'OK'];
             }
 
-            // record the assistant's tool-call turn, then run each tool and feed results back
+            // record the assistant's tool-call turn, then run each tool and feed results
+            // back in the provider's own format (OpenAI 'tool' messages vs Anthropic
+            // tool_result blocks).
             $messages[] = $res['assistant'];
+            $results = [];
             foreach ($res['tool_calls'] as $tc) {
                 $result = '';
                 if (is_callable($onTool)) {
@@ -611,8 +614,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                     $result = "No tool handler provided for '{$tc['name']}'.";
                 }
                 if (is_array($result)) $result = json_encode($result);
-                $messages[] = ['role' => 'tool', 'tool_call_id' => $tc['id'], 'content' => (string)$result];
+                $results[] = ['id' => $tc['id'], 'name' => $tc['name'], 'content' => (string)$result];
             }
+            foreach ($provider->formatToolResults($results) as $m) $messages[] = $m;
         }
 
         return ['success' => true, 'content' => '', 'steps' => $steps, 'messages' => $messages, 'message' => "Stopped after {$maxSteps} steps without a final answer."];

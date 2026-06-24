@@ -392,10 +392,12 @@ class AiWireProvider {
      * @return array ['success','content','tool_calls'=>[{id,name,arguments}],'assistant','finish_reason','usage','raw','message']
      */
     public function runTools(array $messages, array $options = []): array {
-        if ($this->providerKey === 'anthropic') {
-            return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => 'Tool-use for Anthropic is not implemented yet — use an OpenAI-compatible provider.', 'raw' => []];
-        }
+        if ($this->providerKey === 'anthropic') return $this->runToolsAnthropic($messages, $options);
+        return $this->runToolsOpenAI($messages, $options);
+    }
 
+    /** One OpenAI-compatible function-calling turn. */
+    protected function runToolsOpenAI(array $messages, array $options = []): array {
         $model        = $options['model'] ?? $this->model;
         $systemPrompt = (string)($options['systemPrompt'] ?? '');
         $maxTokens    = (int)($options['maxTokens'] ?? 1024);
@@ -456,6 +458,81 @@ class AiWireProvider {
             'raw'           => $data,
             'message'       => 'OK',
         ];
+    }
+
+    /** One Anthropic tool-use turn (tool_use / tool_result blocks). */
+    protected function runToolsAnthropic(array $messages, array $options = []): array {
+        $model        = $options['model'] ?? $this->model;
+        $systemPrompt = (string)($options['systemPrompt'] ?? '');
+        $maxTokens    = (int)($options['maxTokens'] ?? 1024);
+        $temperature  = (float)($options['temperature'] ?? 0.7);
+        $toolDefs     = $options['tools'] ?? [];
+
+        // messages already arrive in Anthropic shape (run() appends our $assistant
+        // content blocks + formatToolResults() user blocks); the first user turn is a
+        // plain string, which Anthropic also accepts.
+        $body = ['model' => $model, 'max_tokens' => $maxTokens, 'messages' => $messages];
+        if ($systemPrompt !== '') $body['system'] = $systemPrompt;
+        if ($temperature > 0) $body['temperature'] = $temperature;
+        if ($toolDefs) {
+            $body['tools'] = array_map(fn($t) => [
+                'name'         => $t['name'] ?? '',
+                'description'   => $t['description'] ?? '',
+                'input_schema' => $t['parameters'] ?? ['type' => 'object', 'properties' => (object)[]],
+            ], $toolDefs);
+        }
+
+        $headers = ['Content-Type: application/json', 'x-api-key: ' . $this->apiKey];
+        foreach ($this->config['extraHeaders'] ?? [] as $k => $v) { if ($v !== '') $headers[] = "{$k}: {$v}"; }
+
+        $response = $this->curlRequest($this->config['url'], $body, $headers);
+        if (!$response['success']) return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => $response['message'], 'raw' => $response['raw'] ?? []];
+        $data = $response['data'];
+        if (isset($data['error'])) {
+            return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => $data['error']['message'] ?? 'API error', 'raw' => $data];
+        }
+
+        $blocks = $data['content'] ?? [];
+        $content = '';
+        $toolCalls = [];
+        foreach ($blocks as $b) {
+            if (($b['type'] ?? '') === 'text') $content .= $b['text'];
+            elseif (($b['type'] ?? '') === 'tool_use') {
+                $toolCalls[] = ['id' => $b['id'] ?? '', 'name' => $b['name'] ?? '', 'arguments' => $b['input'] ?? []];
+            }
+        }
+        $usage = isset($data['usage']) ? [
+            'input_tokens'  => $data['usage']['input_tokens'] ?? 0,
+            'output_tokens' => $data['usage']['output_tokens'] ?? 0,
+            'total_tokens'  => ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0),
+        ] : [];
+
+        return [
+            'success'       => true,
+            'content'       => $content,
+            'tool_calls'    => $toolCalls,
+            'assistant'     => ['role' => 'assistant', 'content' => $blocks],
+            'finish_reason' => $data['stop_reason'] ?? '',
+            'usage'         => $usage,
+            'raw'           => $data,
+            'message'       => 'OK',
+        ];
+    }
+
+    /**
+     * Format tool results as messages to append, in this provider's wire format.
+     * @param array $results [['id'=>, 'name'=>, 'content'=>], ...]
+     */
+    public function formatToolResults(array $results): array {
+        if ($this->providerKey === 'anthropic') {
+            $blocks = [];
+            foreach ($results as $r) {
+                $blocks[] = ['type' => 'tool_result', 'tool_use_id' => $r['id'], 'content' => (string)$r['content']];
+            }
+            return $blocks ? [['role' => 'user', 'content' => $blocks]] : [];
+        }
+        // OpenAI-compatible: one 'tool' message per result
+        return array_map(fn($r) => ['role' => 'tool', 'tool_call_id' => $r['id'], 'content' => (string)$r['content']], $results);
     }
 
     /**
