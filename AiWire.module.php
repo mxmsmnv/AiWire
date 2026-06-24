@@ -557,6 +557,68 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     }
 
     /**
+     * Run a tool-use (agentic) conversation: the model can call the tools you
+     * provide, you execute them via the onTool callback, and the loop continues
+     * until the model returns a final answer or maxSteps is hit.
+     *
+     * @param array $options
+     *   - message|prompt : string, OR messages : array of role/content
+     *   - systemPrompt   : string
+     *   - tools          : [['name'=>, 'description'=>, 'parameters'=>JSON-schema], ...]
+     *   - onTool         : callable(string $name, array $input): string|array
+     *   - maxSteps       : int (default 6)
+     *   - model/provider/key/keyIndex/maxTokens/temperature/timeout
+     * @return array ['success','content','steps','messages','usage','message']
+     */
+    public function run(array $options = []): array {
+        $providerKey = $options['provider'] ?? $this->getDefaultProviderKey();
+        $provider = $this->getProvider($providerKey, $options['key'] ?? null, $options['keyIndex'] ?? null);
+        if (!$provider) return $this->errorResponse("No active provider found for '{$providerKey}'");
+        if (!empty($options['timeout'])) $provider->setTimeout((int)$options['timeout']);
+
+        $messages = $options['messages'] ?? [];
+        if (!$messages && isset($options['message'])) $messages = [['role' => 'user', 'content' => (string)$options['message']]];
+        if (!$messages && isset($options['prompt'])) $messages = [['role' => 'user', 'content' => (string)$options['prompt']]];
+
+        $onTool   = $options['onTool'] ?? null;
+        $maxSteps = max(1, (int)($options['maxSteps'] ?? 6));
+        $turnOpts = [
+            'model'        => $options['model'] ?? $provider->getModel(),
+            'systemPrompt' => $options['systemPrompt'] ?? $this->systemPrompt,
+            'maxTokens'    => (int)($options['maxTokens'] ?? $this->maxTokens),
+            'temperature'  => (float)($options['temperature'] ?? $this->temperature),
+            'tools'        => $options['tools'] ?? [],
+        ];
+
+        $steps = 0;
+        for ($i = 0; $i < $maxSteps; $i++) {
+            $res = $provider->runTools($messages, $turnOpts);
+            if (empty($res['success'])) return $res;
+            $steps++;
+
+            if (empty($res['tool_calls'])) {
+                return ['success' => true, 'content' => $res['content'], 'steps' => $steps, 'messages' => $messages, 'usage' => $res['usage'] ?? [], 'message' => 'OK'];
+            }
+
+            // record the assistant's tool-call turn, then run each tool and feed results back
+            $messages[] = $res['assistant'];
+            foreach ($res['tool_calls'] as $tc) {
+                $result = '';
+                if (is_callable($onTool)) {
+                    try { $result = $onTool($tc['name'], $tc['arguments']); }
+                    catch (\Throwable $e) { $result = 'Error: ' . $e->getMessage(); }
+                } else {
+                    $result = "No tool handler provided for '{$tc['name']}'.";
+                }
+                if (is_array($result)) $result = json_encode($result);
+                $messages[] = ['role' => 'tool', 'tool_call_id' => $tc['id'], 'content' => (string)$result];
+            }
+        }
+
+        return ['success' => true, 'content' => '', 'steps' => $steps, 'messages' => $messages, 'message' => "Stopped after {$maxSteps} steps without a final answer."];
+    }
+
+    /**
      * The first image-capable provider that has an active key (prefers xAI).
      */
     public function getDefaultImageProvider(): ?string {

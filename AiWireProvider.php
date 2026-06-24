@@ -383,6 +383,82 @@ class AiWireProvider {
     }
 
     /**
+     * One turn of a tool-use conversation (OpenAI-compatible function calling).
+     * Sends messages + tool definitions; returns the assistant turn, including any
+     * tool calls the model wants to make. AiWire->run() drives the multi-turn loop.
+     *
+     * @param array $messages role/content messages (system is prepended from options)
+     * @param array $options model, systemPrompt, maxTokens, temperature, tools
+     * @return array ['success','content','tool_calls'=>[{id,name,arguments}],'assistant','finish_reason','usage','raw','message']
+     */
+    public function runTools(array $messages, array $options = []): array {
+        if ($this->providerKey === 'anthropic') {
+            return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => 'Tool-use for Anthropic is not implemented yet — use an OpenAI-compatible provider.', 'raw' => []];
+        }
+
+        $model        = $options['model'] ?? $this->model;
+        $systemPrompt = (string)($options['systemPrompt'] ?? '');
+        $maxTokens    = (int)($options['maxTokens'] ?? 1024);
+        $temperature  = (float)($options['temperature'] ?? 0.7);
+        $toolDefs     = $options['tools'] ?? [];
+
+        $msgs = [];
+        if ($systemPrompt !== '') $msgs[] = ['role' => 'system', 'content' => $systemPrompt];
+        foreach ($messages as $m) $msgs[] = $m;
+
+        $tools = [];
+        foreach ($toolDefs as $t) {
+            $tools[] = ['type' => 'function', 'function' => [
+                'name'        => $t['name'] ?? '',
+                'description'  => $t['description'] ?? '',
+                'parameters'   => $t['parameters'] ?? ['type' => 'object', 'properties' => (object)[]],
+            ]];
+        }
+
+        $body = ['model' => $model, 'temperature' => $temperature, 'messages' => $msgs];
+        if ($tools) { $body['tools'] = $tools; $body['tool_choice'] = $options['toolChoice'] ?? 'auto'; }
+        if ($this->providerKey === 'openai') $body['max_completion_tokens'] = $maxTokens;
+        else $body['max_tokens'] = $maxTokens;
+
+        $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . $this->apiKey];
+        foreach ($this->config['extraHeaders'] ?? [] as $k => $v) { if ($v !== '') $headers[] = "{$k}: {$v}"; }
+
+        $response = $this->curlRequest($this->config['url'], $body, $headers);
+        if (!$response['success']) return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => $response['message'], 'raw' => $response['raw'] ?? []];
+        $data = $response['data'];
+        if (isset($data['error'])) {
+            $msg = is_array($data['error']) ? ($data['error']['message'] ?? 'API error') : (string)$data['error'];
+            return ['success' => false, 'content' => '', 'tool_calls' => [], 'message' => $msg, 'raw' => $data];
+        }
+
+        $assistant = $data['choices'][0]['message'] ?? ['role' => 'assistant', 'content' => ''];
+        $toolCalls = [];
+        foreach ($assistant['tool_calls'] ?? [] as $tc) {
+            $toolCalls[] = [
+                'id'        => $tc['id'] ?? '',
+                'name'      => $tc['function']['name'] ?? '',
+                'arguments' => (json_decode($tc['function']['arguments'] ?? '{}', true) ?: []),
+            ];
+        }
+        $usage = isset($data['usage']) ? [
+            'input_tokens'  => $data['usage']['prompt_tokens'] ?? 0,
+            'output_tokens' => $data['usage']['completion_tokens'] ?? 0,
+            'total_tokens'  => $data['usage']['total_tokens'] ?? 0,
+        ] : [];
+
+        return [
+            'success'       => true,
+            'content'       => (string)($assistant['content'] ?? ''),
+            'tool_calls'    => $toolCalls,
+            'assistant'     => $assistant,
+            'finish_reason' => $data['choices'][0]['finish_reason'] ?? '',
+            'usage'         => $usage,
+            'raw'           => $data,
+            'message'       => 'OK',
+        ];
+    }
+
+    /**
      * Make a cURL request
      *
      * @param string $url
