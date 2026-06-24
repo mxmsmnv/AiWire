@@ -74,6 +74,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 'gpt-5.2'      => 'GPT-5.2',
                 'gpt-4.1'      => 'GPT-4.1',
             ],
+            // image generation
+            'imageUrl'          => 'https://api.openai.com/v1/images/generations',
+            'defaultImageModel' => 'gpt-image-1',
+            'imageModels' => [
+                'gpt-image-1' => 'GPT Image 1',
+                'dall-e-3'    => 'DALL·E 3',
+            ],
         ],
         'google' => [
             'label'       => 'Google (Gemini)',
@@ -107,6 +114,12 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 'grok-4-1-fast-reasoning'     => 'Grok 4.1 Fast (Reasoning)',
                 'grok-4-1-fast-non-reasoning' => 'Grok 4.1 Fast',
                 'grok-code-fast-1'            => 'Grok Code Fast 1',
+            ],
+            // image generation (Imagine)
+            'imageUrl'          => 'https://api.x.ai/v1/images/generations',
+            'defaultImageModel' => 'grok-imagine-image',
+            'imageModels' => [
+                'grok-imagine-image' => 'Grok Imagine (Standard)',
             ],
         ],
         'openrouter' => [
@@ -494,6 +507,58 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             $this->logError("ask() error: " . $e->getMessage());
             return $this->errorResponse($e->getMessage());
         }
+    }
+
+    /**
+     * Generate an image from a text prompt (Imagine).
+     *
+     * @param string $prompt
+     * @param array $options provider, model, n, aspect, resolution, size, timeout, key, keyIndex
+     * @return array ['success','url','b64','model','provider','message','raw']
+     */
+    public function image(string $prompt, array $options = []): array {
+        $prompt = trim($prompt);
+        if ($prompt === '') return $this->errorResponse('Empty image prompt.');
+
+        $providerKey = $options['provider'] ?? $this->getDefaultImageProvider();
+        if (!$providerKey) return $this->errorResponse('No image-capable provider is configured.');
+
+        $provider = $this->getProvider($providerKey, $options['key'] ?? null, $options['keyIndex'] ?? null);
+        if (!$provider) return $this->errorResponse("No active key for image provider '{$providerKey}'.");
+
+        if (!empty($options['timeout'])) $provider->setTimeout((int)$options['timeout']);
+
+        $def = $this->getProviderDefinition($providerKey) ?: [];
+        $opts = array_merge($options, [
+            'imageUrl' => $def['imageUrl'] ?? '',
+            'model'    => $options['model'] ?? ($def['defaultImageModel'] ?? ''),
+        ]);
+
+        try {
+            $result = $provider->generateImage($prompt, $opts);
+            if (!empty($result['success'])) {
+                $this->log("Image from {$providerKey}/" . ($result['model'] ?? '?'));
+            } else {
+                $this->logError("image() error: " . ($result['message'] ?? 'unknown'));
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            $this->logError("image() error: " . $e->getMessage());
+            return $this->errorResponse($e->getMessage());
+        }
+    }
+
+    /**
+     * The first image-capable provider that has an active key (prefers xAI).
+     */
+    public function getDefaultImageProvider(): ?string {
+        $defs = $this->getProviderDefinitions();
+        foreach (array_merge(['xai'], array_keys($defs)) as $key) {
+            $def = $defs[$key] ?? null;
+            if (!$def || empty($def['imageUrl'])) continue;
+            if ($this->getProvider($key)) return $key;
+        }
+        return null;
     }
 
     /**

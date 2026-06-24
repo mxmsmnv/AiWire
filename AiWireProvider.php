@@ -318,6 +318,60 @@ class AiWireProvider {
     }
 
     /**
+     * Generate an image via the provider's image endpoint (config['imageUrl'] or
+     * options['imageUrl']). Normalizes xAI/OpenAI-style responses (data[0].url|b64_json).
+     *
+     * @return array ['success','url','b64','model','provider','message','raw']
+     */
+    public function generateImage(string $prompt, array $options = []): array {
+        $imageUrl = (string)($options['imageUrl'] ?? ($this->config['imageUrl'] ?? ''));
+        if ($imageUrl === '') {
+            return ['success' => false, 'url' => '', 'b64' => '', 'message' => "Provider '{$this->providerKey}' has no image endpoint.", 'raw' => []];
+        }
+        $model = (string)($options['model'] ?? ($this->config['defaultImageModel'] ?? $this->model));
+
+        $body = [
+            'model'  => $model,
+            'prompt' => $prompt,
+            'n'      => (int)($options['n'] ?? 1),
+        ];
+        if (!empty($options['aspect']))          $body['aspect_ratio']    = $options['aspect'];
+        if (!empty($options['resolution']))      $body['resolution']      = $options['resolution'];
+        if (!empty($options['size']))            $body['size']            = $options['size'];
+        if (!empty($options['response_format'])) $body['response_format'] = $options['response_format'];
+
+        $headers = ['Content-Type: application/json'];
+        if (($this->config['headerType'] ?? 'bearer') === 'bearer') {
+            $headers[] = 'Authorization: Bearer ' . $this->apiKey;
+        } else {
+            $headers[] = 'x-api-key: ' . $this->apiKey;
+        }
+        foreach ($this->config['extraHeaders'] ?? [] as $k => $v) {
+            if ($v !== '') $headers[] = "{$k}: {$v}";
+        }
+
+        $response = $this->curlRequest($imageUrl, $body, $headers);
+        if (!$response['success']) {
+            return ['success' => false, 'url' => '', 'b64' => '', 'model' => $model, 'provider' => $this->providerKey, 'message' => $response['message'], 'raw' => $response['raw'] ?? ($response['data'] ?? [])];
+        }
+
+        $item = $response['data']['data'][0] ?? null;
+        if (!is_array($item)) {
+            return ['success' => false, 'url' => '', 'b64' => '', 'model' => $model, 'provider' => $this->providerKey, 'message' => 'Unexpected image response.', 'raw' => $response['data']];
+        }
+
+        return [
+            'success'  => true,
+            'url'      => (string)($item['url'] ?? ''),
+            'b64'      => (string)($item['b64_json'] ?? ''),
+            'model'    => $model,
+            'provider' => $this->providerKey,
+            'message'  => 'OK',
+            'raw'      => $response['data'],
+        ];
+    }
+
+    /**
      * Make a cURL request
      *
      * @param string $url
