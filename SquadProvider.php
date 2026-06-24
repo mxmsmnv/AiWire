@@ -1,7 +1,7 @@
 <?php namespace ProcessWire;
 
 /**
- * AiWireProvider - Handles API communication with AI providers
+ * SquadProvider - Handles API communication with AI providers
  *
  * Supports Anthropic (Claude), OpenAI (GPT), xAI (Grok), and OpenRouter.
  *
@@ -9,12 +9,12 @@
  * @license MIT
  */
 
-class AiWireProvider {
+class SquadProvider {
 
     /** @var string Provider key (anthropic, openai, google, xai, openrouter) */
     protected string $providerKey;
 
-    /** @var array Provider configuration from AiWire::PROVIDERS */
+    /** @var array Provider configuration from Squad::PROVIDERS */
     protected array $config;
 
     /** @var string API key */
@@ -385,7 +385,7 @@ class AiWireProvider {
     /**
      * One turn of a tool-use conversation (OpenAI-compatible function calling).
      * Sends messages + tool definitions; returns the assistant turn, including any
-     * tool calls the model wants to make. AiWire->run() drives the multi-turn loop.
+     * tool calls the model wants to make. Squad->run() drives the multi-turn loop.
      *
      * @param array $messages role/content messages (system is prepended from options)
      * @param array $options model, systemPrompt, maxTokens, temperature, tools

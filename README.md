@@ -1,8 +1,10 @@
-# AiWire — AI Integration Module for ProcessWire
+# Squad AI
+
+*AI integration module for ProcessWire — formerly AiWire.*
 
 Connect your ProcessWire site to AI providers: **Anthropic (Claude)**, **OpenAI (GPT)**, **Google (Gemini)**, **xAI (Grok)**, and **OpenRouter** (400+ models).
 
-![AiWire](assets/AiWire.png)
+![Squad AI](assets/Squad.png)
 
 Manage multiple API keys per provider, test connections from admin, and use AI in your templates with a clean PHP API.
 
@@ -14,7 +16,7 @@ Manage multiple API keys per provider, test connections from admin, and use AI i
 **Website:** [smnv.org](https://smnv.org)  
 **Email:** [maxim@smnv.org](mailto:maxim@smnv.org)
 
-If this project helps your work, consider supporting future development: [GitHub Sponsors](https://github.com/sponsors/mxmsmnv) or [smnv.org/sponsor](https://smnv.org/sponsor/).  
+If this project helps your work, consider supporting future development: [GitHub Sponsors](https://github.com/sponsors/mxmsmnv) or [smnv.org/sponsor](https://smnv.org/sponsor/).
 
 ## Features
 
@@ -42,16 +44,16 @@ If this project helps your work, consider supporting future development: [GitHub
 
 ## Installation
 
-1. Download or clone into `site/modules/AiWire/`
-2. Admin → Modules → Refresh → Install **AiWire**
+1. Download or clone into `site/modules/Squad/`
+2. Admin → Modules → Refresh → Install **Squad**
 3. Configure → add API keys → click test button
-4. Use `$modules->get('AiWire')` in your templates
+4. Use `$modules->get('Squad')` in your templates
 
 ```
-site/modules/AiWire/
-├── AiWire.module.php       # Main module
-├── AiWireProvider.php       # API client for all providers
-├── AiWireCache.php          # File-based cache system
+site/modules/Squad/
+├── Squad.module.php       # Main module
+├── SquadProvider.php       # API client for all providers
+├── SquadCache.php          # File-based cache system
 ├── models.json              # Editable provider model list
 ├── README.md                # This file
 ├── DOCUMENTATION.md         # Full API reference + 25 examples
@@ -74,9 +76,9 @@ Provider model IDs and labels are loaded from `models.json`. Edit that file when
 }
 ```
 
-If `models.json` is missing or invalid, AiWire falls back to the built-in model list.
+If `models.json` is missing or invalid, Squad falls back to the built-in model list.
 
-OpenAI and OpenRouter also support model refresh from the module settings. Refreshed models are stored in module config separately from `models.json` and are used first; if no refreshed list exists, AiWire falls back to `models.json`, then to built-in defaults.
+OpenAI and OpenRouter also support model refresh from the module settings. Refreshed models are stored in module config separately from `models.json` and are used first; if no refreshed list exists, Squad falls back to `models.json`, then to built-in defaults.
 
 Each API key can also define a custom model. The custom model value is optional, but when present it overrides the selected model for that key. This is useful for private, preview, account-gated, proxy, or newly released model IDs.
 
@@ -99,7 +101,7 @@ Keys can be stored directly in the module settings, or as environment references
 ## Quick Start
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Simple — returns text only
 echo $ai->chat('What is ProcessWire CMS?');

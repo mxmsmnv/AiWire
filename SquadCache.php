@@ -1,14 +1,14 @@
 <?php namespace ProcessWire;
 
 /**
- * AiWireCache - File-based response cache for AiWire
+ * SquadCache - File-based response cache for Squad
  *
  * Stores AI responses as JSON files organized by page ID.
  * Supports TTL durations: D (day), W (week), M (month), Y (year), or seconds.
  * Auto-cleans expired entries on read.
  *
  * Cache structure:
- *   site/assets/cache/AiWire/
+ *   site/assets/cache/Squad/
  *   ├── 0/              (global, no page context)
  *   │   ├── a1b2c3.json
  *   │   └── d4e5f6.json
@@ -21,7 +21,7 @@
  * @license MIT
  */
 
-class AiWireCache {
+class SquadCache {
 
     /** @var string Base cache directory */
     protected string $basePath;
@@ -38,7 +38,7 @@ class AiWireCache {
     ];
 
     public function __construct(?string $basePath = null, bool $debug = false) {
-        $this->basePath = $basePath ?: wire('config')->paths->cache . 'AiWire/';
+        $this->basePath = $basePath ?: wire('config')->paths->cache . 'Squad/';
         $this->debug = $debug;
     }
 
@@ -141,7 +141,7 @@ class AiWireCache {
     }
 
     /**
-     * Clear all AiWire cache
+     * Clear all Squad cache
      *
      * @return int Number of files deleted
      */
@@ -297,6 +297,6 @@ class AiWireCache {
 
     protected function debugLog(string $message): void {
         if (!$this->debug) return;
-        wire('log')->save('aiwire-debug', "[Cache] {$message}");
+        wire('log')->save('squad-debug', "[Cache] {$message}");
     }
 }

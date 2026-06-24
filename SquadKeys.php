@@ -1,24 +1,30 @@
 <?php namespace ProcessWire;
 
 /**
- * AiWireKeys — encrypted storage for provider API keys in a dedicated table.
+ * SquadKeys — encrypted storage for provider API keys in a dedicated table.
  *
  * Provider keys are OUTBOUND (sent to the provider on every request), so they
- * must be recoverable — they're encrypted, not hashed. Stored in `aiwire_keys`
+ * must be recoverable — they're encrypted, not hashed. Stored in `squad_keys`
  * (separate from the module config), with the value encrypted via libsodium
  * secretbox. The encryption key is DERIVED from a secret kept in config.php
  * (outside the DB), so a database dump only ever contains ciphertext.
  *
- * Secret source (first non-empty): $config->aiwireSecret → tableSalt → userAuthSalt.
+ * Secret source (first non-empty): $config->squadSecret → tableSalt → userAuthSalt.
  * NOTE: do not change that salt after keys are stored — they'd need re-entering.
  */
-class AiWireKeys extends Wire {
+class SquadKeys extends Wire {
 
-	const TABLE   = 'aiwire_keys';
-	const CONTEXT = 'AiWireKeys.v1'; // domain separation + versioning for the derived key
+	const TABLE   = 'squad_keys';
+	const LEGACY_TABLE = 'aiwire_keys'; // original name; migrated on first ensureTable()
 
-	/** Create the table if missing. */
+	// KDF context for the derived encryption key. MUST stay this literal value
+	// across renames: it (with the config.php salt) determines the key that
+	// decrypts already-stored ciphertext. Changing it orphans every key.
+	const CONTEXT = 'AiWireKeys.v1';
+
+	/** Create the table if missing (renaming any pre-Squad table first). */
 	public function ensureTable(): void {
+		$this->migrateLegacyTable();
 		$this->wire('database')->exec(
 			"CREATE TABLE IF NOT EXISTS `" . self::TABLE . "` (
 				`id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -40,6 +46,29 @@ class AiWireKeys extends Wire {
 		$this->ensureColumn('custom_model', "VARCHAR(255) NOT NULL DEFAULT '' AFTER `model`");
 	}
 
+	/**
+	 * Rename a pre-Squad key table (`aiwire_keys`, or `ultra_keys`/`max_keys` from
+	 * interim builds) to `squad_keys` if it exists and the new one doesn't yet.
+	 * The ciphertext is unaffected — the encryption key derives from a config.php
+	 * salt + CONTEXT, not from the table or module name.
+	 */
+	protected function migrateLegacyTable(): void {
+		try {
+			$db = $this->wire('database');
+			$has = fn(string $t) => (bool)$db->query("SHOW TABLES LIKE " . $db->quote($t))->fetch();
+			if ($has(self::TABLE)) return;
+			foreach ([self::LEGACY_TABLE, 'ultra_keys', 'max_keys'] as $old) {
+				if ($has($old)) {
+					$db->exec("RENAME TABLE `{$old}` TO `" . self::TABLE . "`");
+					$this->wire('log')->save('squad', "Migrated key table {$old} → " . self::TABLE);
+					return;
+				}
+			}
+		} catch (\Throwable $e) {
+			$this->wire('log')->error('squad keys migrateLegacyTable: ' . $e->getMessage());
+		}
+	}
+
 	/** Add a column if it's missing (idempotent schema guard for upgrades). */
 	protected function ensureColumn(string $column, string $definition): void {
 		try {
@@ -49,7 +78,7 @@ class AiWireKeys extends Wire {
 			if ($chk->fetch()) return;
 			$db->exec("ALTER TABLE `" . self::TABLE . "` ADD COLUMN `{$column}` {$definition}");
 		} catch (\Throwable $e) {
-			$this->wire('log')->error('aiwire keys ensureColumn: ' . $e->getMessage());
+			$this->wire('log')->error('squad keys ensureColumn: ' . $e->getMessage());
 		}
 	}
 
@@ -60,7 +89,7 @@ class AiWireKeys extends Wire {
 	/** 32-byte encryption key derived from a config.php secret (never the DB). */
 	protected function secretKey(): string {
 		$cfg = $this->wire('config');
-		$base = (string)($cfg->aiwireSecret ?: ($cfg->tableSalt ?: $cfg->userAuthSalt));
+		$base = (string)($cfg->squadSecret ?: ($cfg->tableSalt ?: $cfg->userAuthSalt));
 		return sodium_crypto_generichash(self::CONTEXT . '|' . $base, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 	}
 
@@ -106,7 +135,7 @@ class AiWireKeys extends Wire {
 			]);
 			return (int)$this->wire('database')->lastInsertId();
 		} catch (\Throwable $e) {
-			$this->wire('log')->error('aiwire keys add: ' . $e->getMessage());
+			$this->wire('log')->error('squad keys add: ' . $e->getMessage());
 			return 0;
 		}
 	}
@@ -144,7 +173,7 @@ class AiWireKeys extends Wire {
 	}
 
 	/**
-	 * Keys for a provider, decrypted, in the shape the rest of AiWire expects:
+	 * Keys for a provider, decrypted, in the shape the rest of Squad expects:
 	 * [['key'=>, 'label'=>, 'model'=>, 'enabled'=>, 'status'=>], ...]
 	 */
 	public function getProviderKeys(string $provider): array {

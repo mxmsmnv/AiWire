@@ -1,8 +1,21 @@
 # Changelog
 
-All notable changes to the AiWire module are documented in this file.
+All notable changes to the Squad module (formerly AiWire) are documented in this file.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow [Semantic Versioning](https://semver.org/).
+
+---
+
+## [1.5.0] — 2026-06-25
+
+### Changed
+- **Renamed the module from AiWire to Squad** — class, files, table, and admin UI. Existing installs migrate automatically on install: the encrypted key table is renamed and settings are carried over, and the encryption context is preserved so stored keys keep working.
+
+### Added
+- Encrypted provider key storage in a dedicated `squad_keys` table (libsodium secretbox; encryption secret derived from a `config.php` salt) — keys are no longer kept in module config or exposed in database dumps.
+- Image generation via `image()` — xAI Grok Imagine and OpenAI (gpt-image-1 / DALL·E 3).
+- Anthropic prompt caching for large system prompts.
+- Tool-use / agent loop via `run()`, supporting both OpenAI and Anthropic tool formats.
 
 ---
 

@@ -1,7 +1,7 @@
 <?php namespace ProcessWire;
 
 /**
- * AiWire - AI Integration Module for ProcessWire
+ * Squad - AI Integration Module for ProcessWire
  *
  * Connect your ProcessWire site to AI providers: Anthropic, OpenAI, Google, xAI, OpenRouter.
  * Manage multiple API keys, test connections, and use AI in your templates.
@@ -9,21 +9,21 @@
  * @author Maxim Semenov <maxim@smnv.org> (smnv.org)
  * @license MIT
  * @version 1.4.0
- * @see https://github.com/mxmsmnv/AiWire
+ * @see https://github.com/mxmsmnv/Squad
  */
 
-require_once(__DIR__ . '/AiWireProvider.php');
-require_once(__DIR__ . '/AiWireCache.php');
-require_once(__DIR__ . '/AiWireKeys.php');
+require_once(__DIR__ . '/SquadProvider.php');
+require_once(__DIR__ . '/SquadCache.php');
+require_once(__DIR__ . '/SquadKeys.php');
 
-class AiWire extends WireData implements Module, ConfigurableModule {
+class Squad extends WireData implements Module, ConfigurableModule {
 
     /**
      * Module information
      */
     public static function getModuleInfo() {
         return [
-            'title'    => 'AiWire',
+            'title'    => 'Squad',
             'version'  => '1.5.0',
             'summary'  => __('AI integration for ProcessWire. Supports Anthropic, OpenAI, Google, xAI, and OpenRouter.'),
             'author'   => 'Maxim Semenov',
@@ -190,13 +190,13 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         'defaultCacheTtl'    => 'D',
         'enableLogging'      => true,
         'enableDebugLogging' => false,
-        'logName'            => 'aiwire',
+        'logName'            => 'squad',
     ];
 
-    /** @var AiWireProvider[] cached provider instances */
+    /** @var SquadProvider[] cached provider instances */
     protected $providerInstances = [];
 
-    /** @var AiWireCache cache instance */
+    /** @var SquadCache cache instance */
     protected $cache = null;
 
     /** @var array|null provider definitions merged with models.json */
@@ -211,14 +211,42 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         // Initialize cache
-        $this->cache = new AiWireCache(null, !empty($this->enableDebugLogging));
+        $this->cache = new SquadCache(null, !empty($this->enableDebugLogging));
     }
 
     /**
-     * Install — create the encrypted key table.
+     * Install — create the encrypted key table (renaming a pre-Squad table if
+     * present) and, when upgrading in place from the former "AiWire" module,
+     * carry over its settings.
      */
     public function ___install() {
         $this->keys()->ensureTable();
+        $this->migrateFromAiWire();
+    }
+
+    /**
+     * One-time settings migration from the pre-rename "AiWire" module: copy its
+     * config (default provider/model, system prompt, etc.) into Squad if Squad
+     * has none yet and AiWire's config still exists. Keys are NOT here — they
+     * already live in the (renamed) encrypted table. Safe no-op on a fresh install.
+     */
+    protected function migrateFromAiWire(): void {
+        try {
+            $modules = $this->wire('modules');
+            $mine = $modules->getModuleConfigData($this);
+            if (!empty($mine['defaultProvider']) || !empty($mine['systemPrompt'])) return;
+
+            $old = $modules->getModuleConfigData('AiWire');
+            if (!is_array($old) || !$old) return;
+
+            unset($old['providers']); // legacy plaintext key blob — never carry it over
+            $merged = array_merge($mine, $old);
+            $merged['providers'] = '{}';
+            $modules->saveModuleConfigData($this, $merged);
+            $this->log('Migrated settings from AiWire module');
+        } catch (\Throwable $e) {
+            $this->error('Squad: settings migration from AiWire failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -241,7 +269,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      * Ready - handle AJAX requests and schedule cache cleanup
      */
     public function ready() {
-        if ($this->wire('config')->ajax && $this->wire('input')->post('aiwire_action')) {
+        if ($this->wire('config')->ajax && $this->wire('input')->post('squad_action')) {
             $this->handleAjaxRequest();
         }
 
@@ -353,7 +381,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             if ($resolvedKey === '') {
                 return ['success' => false, 'models' => [], 'message' => 'API key is empty or environment variable is not set'];
             }
-            $provider = new AiWireProvider($providerKey, $config, $resolvedKey, $config['defaultModel'], [
+            $provider = new SquadProvider($providerKey, $config, $resolvedKey, $config['defaultModel'], [
                 'timeout' => (int)$this->timeout,
             ]);
         }
@@ -769,9 +797,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      * @param string $providerKey
      * @param string|null $specificKey Use a specific API key string
      * @param int|null $keyIndex Use a specific key by index
-     * @return AiWireProvider|null
+     * @return SquadProvider|null
      */
-    public function getProvider(string $providerKey, ?string $specificKey = null, ?int $keyIndex = null): ?AiWireProvider {
+    public function getProvider(string $providerKey, ?string $specificKey = null, ?int $keyIndex = null): ?SquadProvider {
         $config = $this->getProviderDefinition($providerKey);
         if (!$config) return null;
         $keys = $this->getProviderKeys($providerKey);
@@ -823,7 +851,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         $cacheKey = $providerKey . ':' . md5($apiKey) . ':' . md5($model);
         if (!isset($this->providerInstances[$cacheKey])) {
-            $this->providerInstances[$cacheKey] = new AiWireProvider($providerKey, $config, $apiKey, $model, [
+            $this->providerInstances[$cacheKey] = new SquadProvider($providerKey, $config, $apiKey, $model, [
                 'timeout' => (int)$this->timeout,
             ]);
         }
@@ -867,12 +895,12 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     }
 
     /** Lazily-built encrypted key store. */
-    protected function keys(): AiWireKeys {
-        if ($this->keyStore === null) $this->keyStore = $this->wire(new AiWireKeys());
+    protected function keys(): SquadKeys {
+        if ($this->keyStore === null) $this->keyStore = $this->wire(new SquadKeys());
         return $this->keyStore;
     }
 
-    /** @var AiWireKeys|null */
+    /** @var SquadKeys|null */
     protected $keyStore = null;
 
     /**
@@ -940,9 +968,9 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     /**
      * Get the cache instance for direct access
      *
-     * @return AiWireCache
+     * @return SquadCache
      */
-    public function cache(): AiWireCache {
+    public function cache(): SquadCache {
         return $this->cache;
     }
 
@@ -960,7 +988,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
     }
 
     /**
-     * Clear ALL AiWire cache
+     * Clear ALL Squad cache
      *
      * @return int Number of files deleted
      */
@@ -1294,7 +1322,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             session_write_close();
         }
 
-        $action = $this->wire('input')->post->name('aiwire_action');
+        $action = $this->wire('input')->post->name('squad_action');
         $result = ['success' => false, 'message' => 'Unknown action'];
 
         switch ($action) {
@@ -1342,7 +1370,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             return ['success' => false, 'message' => 'API key is empty or environment variable is not set'];
         }
 
-        $provider = new AiWireProvider($providerKey, $config, $apiKey, $config['defaultModel'], [
+        $provider = new SquadProvider($providerKey, $config, $apiKey, $config['defaultModel'], [
             'timeout' => 15,
         ]);
 
@@ -1679,14 +1707,14 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         // config-form submit never writes plaintext keys back into module config.
         $f = $modules->get('InputfieldHidden');
         $f->attr('name', 'providers');
-        $f->attr('id', 'aiwire-providers-data');
+        $f->attr('id', 'squad-providers-data');
         $f->attr('value', '{}');
         $inputfields->add($f);
 
         // Hidden field for refreshed provider model JSON data
         $f = $modules->get('InputfieldHidden');
         $f->attr('name', 'providerModels');
-        $f->attr('id', 'aiwire-provider-models-data');
+        $f->attr('id', 'squad-provider-models-data');
         $f->attr('value', $this->providerModels ?: '{}');
         $inputfields->add($f);
 
@@ -1698,7 +1726,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
      */
     protected function renderProviderKeysUI(): string {
         $providers = $this->getAllProviderKeys();
-        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
+        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=Squad';
         $providerDefinitions = $this->getProviderDefinitions();
         foreach ($providerDefinitions as $pk => &$config) {
             $config['models'] = $this->getProviderModels($pk);
@@ -1713,17 +1741,17 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $csrfFieldsJson = $this->getCsrfFieldsJson();
 
         $html = <<<HTML
-<div id="aiwire-keys-app" data-providers='{$providersJson}' data-saved='{$savedKeysJson}' data-url='{$moduleUrlAttr}'>
+<div id="squad-keys-app" data-providers='{$providersJson}' data-saved='{$savedKeysJson}' data-url='{$moduleUrlAttr}'>
     <style>
-        #aiwire-keys-app { margin: 10px 0; }
-        .aiwire-provider-section {
+        #squad-keys-app { margin: 10px 0; }
+        .squad-provider-section {
             background: #f9f9f9;
             border: 1px solid #ddd;
             border-radius: 6px;
             margin-bottom: 15px;
             overflow: hidden;
         }
-        .aiwire-provider-header {
+        .squad-provider-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1733,15 +1761,15 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             cursor: pointer;
             user-select: none;
         }
-        .aiwire-provider-header:hover { background: #f5f5f5; }
-        .aiwire-provider-header h4 {
+        .squad-provider-header:hover { background: #f5f5f5; }
+        .squad-provider-header h4 {
             margin: 0;
             font-size: 14px;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .aiwire-provider-badge {
+        .squad-provider-badge {
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -1750,12 +1778,12 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             border-radius: 10px;
             font-weight: normal;
         }
-        .aiwire-badge-active { background: #d4edda; color: #155724; }
-        .aiwire-badge-inactive { background: #f8d7da; color: #721c24; }
-        .aiwire-badge-nokeys { background: #e2e3e5; color: #383d41; }
-        .aiwire-provider-body { padding: 16px; }
-        .aiwire-provider-body.collapsed { display: none; }
-        .aiwire-key-row {
+        .squad-badge-active { background: #d4edda; color: #155724; }
+        .squad-badge-inactive { background: #f8d7da; color: #721c24; }
+        .squad-badge-nokeys { background: #e2e3e5; color: #383d41; }
+        .squad-provider-body { padding: 16px; }
+        .squad-provider-body.collapsed { display: none; }
+        .squad-key-row {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -1765,8 +1793,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             border-radius: 5px;
             margin-bottom: 8px;
         }
-        .aiwire-key-row:hover { border-color: #999; }
-        .aiwire-key-input {
+        .squad-key-row:hover { border-color: #999; }
+        .squad-key-input {
             flex: 2;
             padding: 6px 10px;
             border: 1px solid #ccc;
@@ -1774,14 +1802,14 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             font-family: monospace;
             font-size: 13px;
         }
-        .aiwire-label-input {
+        .squad-label-input {
             flex: 1;
             padding: 6px 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 13px;
         }
-        .aiwire-custom-model-input {
+        .squad-custom-model-input {
             flex: 1;
             padding: 6px 10px;
             border: 1px solid #ccc;
@@ -1789,27 +1817,27 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             font-family: monospace;
             font-size: 13px;
         }
-        .aiwire-model-select {
+        .squad-model-select {
             flex: 1;
             padding: 6px 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 13px;
         }
-        .aiwire-status-icon {
+        .squad-status-icon {
             width: 24px;
             text-align: center;
             font-size: 16px;
         }
-        .aiwire-status-ok { color: #28a745; }
-        .aiwire-status-fail { color: #dc3545; }
-        .aiwire-status-unknown { color: #6c757d; }
-        .aiwire-status-testing { color: #ffc107; }
-        .aiwire-key-actions {
+        .squad-status-ok { color: #28a745; }
+        .squad-status-fail { color: #dc3545; }
+        .squad-status-unknown { color: #6c757d; }
+        .squad-status-testing { color: #ffc107; }
+        .squad-key-actions {
             display: flex;
             gap: 4px;
         }
-        .aiwire-btn {
+        .squad-btn {
             padding: 5px 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
@@ -1820,21 +1848,21 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             align-items: center;
             gap: 4px;
         }
-        .aiwire-btn:hover { background: #f0f0f0; border-color: #999; }
-        .aiwire-btn-primary { background: #2196F3; color: #fff; border-color: #1976D2; }
-        .aiwire-btn-primary:hover { background: #1976D2; }
-        .aiwire-btn-danger { color: #dc3545; }
-        .aiwire-btn-danger:hover { background: #dc3545; color: #fff; border-color: #dc3545; }
-        .aiwire-btn-success { background: #28a745; color: #fff; border-color: #218838; }
-        .aiwire-btn-success:hover { background: #218838; }
-        .aiwire-add-key-row {
+        .squad-btn:hover { background: #f0f0f0; border-color: #999; }
+        .squad-btn-primary { background: #2196F3; color: #fff; border-color: #1976D2; }
+        .squad-btn-primary:hover { background: #1976D2; }
+        .squad-btn-danger { color: #dc3545; }
+        .squad-btn-danger:hover { background: #dc3545; color: #fff; border-color: #dc3545; }
+        .squad-btn-success { background: #28a745; color: #fff; border-color: #218838; }
+        .squad-btn-success:hover { background: #218838; }
+        .squad-add-key-row {
             padding: 8px 0;
         }
-        .aiwire-enabled-toggle {
+        .squad-enabled-toggle {
             cursor: pointer;
             font-size: 16px;
         }
-        .aiwire-save-bar {
+        .squad-save-bar {
             display: flex;
             align-items: center;
             gap: 15px;
@@ -1844,30 +1872,30 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             border: 1px solid #ffc107;
             border-radius: 6px;
         }
-        .aiwire-save-bar.hidden { display: none; }
-        .aiwire-save-bar.saved {
+        .squad-save-bar.hidden { display: none; }
+        .squad-save-bar.saved {
             background: #d4edda;
             border-color: #28a745;
         }
-        .aiwire-docs-link {
+        .squad-docs-link {
             font-size: 12px;
             color: #666;
             text-decoration: none;
         }
-        .aiwire-docs-link:hover { color: #2196F3; }
+        .squad-docs-link:hover { color: #2196F3; }
     </style>
 
-    <div id="aiwire-providers-container"></div>
+    <div id="squad-providers-container"></div>
 
-    <div id="aiwire-save-bar" class="aiwire-save-bar hidden">
-        <button type="button" id="aiwire-save-btn" class="aiwire-btn aiwire-btn-success" onclick="AiWireApp.saveAll()">
+    <div id="squad-save-bar" class="squad-save-bar hidden">
+        <button type="button" id="squad-save-btn" class="squad-btn squad-btn-success" onclick="SquadApp.saveAll()">
             <i class="fa fa-save"></i> Save All Keys
         </button>
-        <span id="aiwire-save-status"></span>
+        <span id="squad-save-status"></span>
     </div>
 
     <script>
-    var AiWireApp = (function() {
+    var SquadApp = (function() {
         'use strict';
 
         var container, providers, savedKeys, moduleUrl;
@@ -1876,8 +1904,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         var dirty = false;
 
         function init() {
-            var app = document.getElementById('aiwire-keys-app');
-            container = document.getElementById('aiwire-providers-container');
+            var app = document.getElementById('squad-keys-app');
+            container = document.getElementById('squad-providers-container');
             providers = JSON.parse(app.getAttribute('data-providers'));
             savedKeys = JSON.parse(app.getAttribute('data-saved'));
             moduleUrl = app.getAttribute('data-url');
@@ -1906,21 +1934,21 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             var badge = '';
 
             if (keys.length === 0) {
-                badge = '<span class="aiwire-provider-badge aiwire-badge-nokeys">No keys</span>';
+                badge = '<span class="squad-provider-badge squad-badge-nokeys">No keys</span>';
             } else if (activeCount > 0) {
-                badge = '<span class="aiwire-provider-badge aiwire-badge-active"><i class="fa fa-check"></i> ' + activeCount + ' active</span>';
+                badge = '<span class="squad-provider-badge squad-badge-active"><i class="fa fa-check"></i> ' + activeCount + ' active</span>';
             } else {
-                badge = '<span class="aiwire-provider-badge aiwire-badge-inactive"><i class="fa fa-times"></i> Disabled</span>';
+                badge = '<span class="squad-provider-badge squad-badge-inactive"><i class="fa fa-times"></i> Disabled</span>';
             }
 
             var collapsed = keys.length === 0 ? '' : ' collapsed';
 
-            var html = '<div class="aiwire-provider-section" data-provider="' + pk + '">';
-            html += '<div class="aiwire-provider-header" onclick="AiWireApp.toggleProvider(\'' + pk + '\')">';
+            var html = '<div class="squad-provider-section" data-provider="' + pk + '">';
+            html += '<div class="squad-provider-header" onclick="SquadApp.toggleProvider(\'' + pk + '\')">';
             html += '  <h4><i class="fa fa-' + escAttr(config.icon) + '"></i> ' + escHtml(config.label) + ' ' + badge + '</h4>';
-            html += '  <div><a href="' + escAttr(config.docsUrl) + '" target="_blank" class="aiwire-docs-link" onclick="event.stopPropagation()"><i class="fa fa-external-link"></i> Docs</a></div>';
+            html += '  <div><a href="' + escAttr(config.docsUrl) + '" target="_blank" class="squad-docs-link" onclick="event.stopPropagation()"><i class="fa fa-external-link"></i> Docs</a></div>';
             html += '</div>';
-            html += '<div class="aiwire-provider-body' + collapsed + '" id="aiwire-body-' + pk + '">';
+            html += '<div class="squad-provider-body' + collapsed + '" id="squad-body-' + pk + '">';
 
             // Render key rows
             for (var i = 0; i < keys.length; i++) {
@@ -1928,8 +1956,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             }
 
             // Add key button
-            html += '<div class="aiwire-add-key-row">';
-            html += '  <button type="button" class="aiwire-btn" onclick="AiWireApp.addKey(\'' + pk + '\')">';
+            html += '<div class="squad-add-key-row">';
+            html += '  <button type="button" class="squad-btn" onclick="SquadApp.addKey(\'' + pk + '\')">';
             html += '    <i class="fa fa-plus"></i> Add API Key';
             html += '  </button>';
             html += '</div>';
@@ -1938,25 +1966,25 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         function renderKeyRow(pk, index, keyData, config) {
-            var statusClass = 'aiwire-status-unknown';
+            var statusClass = 'squad-status-unknown';
             var statusIcon = 'fa-question-circle';
             var statusTitle = 'Not tested';
 
             if (keyData.status === 'ok') {
-                statusClass = 'aiwire-status-ok';
+                statusClass = 'squad-status-ok';
                 statusIcon = 'fa-check-circle';
                 statusTitle = 'Connected';
             } else if (keyData.status === 'fail') {
-                statusClass = 'aiwire-status-fail';
+                statusClass = 'squad-status-fail';
                 statusIcon = 'fa-times-circle';
                 statusTitle = 'Failed';
             } else if (keyData.status === 'testing') {
-                statusClass = 'aiwire-status-testing';
+                statusClass = 'squad-status-testing';
                 statusIcon = 'fa-spinner fa-spin';
                 statusTitle = 'Testing...';
             }
 
-            var enabledIcon = keyData.enabled ? 'fa-toggle-on aiwire-status-ok' : 'fa-toggle-off aiwire-status-unknown';
+            var enabledIcon = keyData.enabled ? 'fa-toggle-on squad-status-ok' : 'fa-toggle-off squad-status-unknown';
             var enabledTitle = keyData.enabled ? 'Enabled (click to disable)' : 'Disabled (click to enable)';
 
             // Model options
@@ -1975,22 +2003,22 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             var maskedKey = maskKey(keyData.key);
             var refreshButton = '';
             if (config.canRefreshModels) {
-                refreshButton = '<button type="button" class="aiwire-btn" title="Refresh models" onclick="AiWireApp.refreshModels(\'' + pk + '\',' + index + ')"><i class="fa fa-refresh"></i></button>';
+                refreshButton = '<button type="button" class="squad-btn" title="Refresh models" onclick="SquadApp.refreshModels(\'' + pk + '\',' + index + ')"><i class="fa fa-refresh"></i></button>';
             }
 
-            var html = '<div class="aiwire-key-row" id="aiwire-row-' + pk + '-' + index + '">';
-            html += '<span class="aiwire-enabled-toggle" title="' + enabledTitle + '" onclick="AiWireApp.toggleEnabled(\'' + pk + '\',' + index + ')">';
+            var html = '<div class="squad-key-row" id="squad-row-' + pk + '-' + index + '">';
+            html += '<span class="squad-enabled-toggle" title="' + enabledTitle + '" onclick="SquadApp.toggleEnabled(\'' + pk + '\',' + index + ')">';
             html += '  <i class="fa ' + enabledIcon + '"></i>';
             html += '</span>';
-            html += '<span class="aiwire-status-icon ' + statusClass + '" title="' + statusTitle + '"><i class="fa ' + statusIcon + '"></i></span>';
-            html += '<input type="text" class="aiwire-label-input" placeholder="Label (optional)" value="' + escHtml(keyData.label || '') + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'label\',this.value)" />';
-            html += '<input type="password" class="aiwire-key-input" placeholder="API Key" value="' + escHtml(keyData.key) + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'key\',this.value)" />';
-            html += '<select class="aiwire-model-select" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'model\',this.value)">' + modelOptions + '</select>';
-            html += '<input type="text" class="aiwire-custom-model-input" placeholder="Custom model (optional)" value="' + escHtml(keyData.custom_model || '') + '" onchange="AiWireApp.updateKey(\'' + pk + '\',' + index + ',\'custom_model\',this.value)" />';
-            html += '<div class="aiwire-key-actions">';
+            html += '<span class="squad-status-icon ' + statusClass + '" title="' + statusTitle + '"><i class="fa ' + statusIcon + '"></i></span>';
+            html += '<input type="text" class="squad-label-input" placeholder="Label (optional)" value="' + escHtml(keyData.label || '') + '" onchange="SquadApp.updateKey(\'' + pk + '\',' + index + ',\'label\',this.value)" />';
+            html += '<input type="password" class="squad-key-input" placeholder="API Key" value="' + escHtml(keyData.key) + '" onchange="SquadApp.updateKey(\'' + pk + '\',' + index + ',\'key\',this.value)" />';
+            html += '<select class="squad-model-select" onchange="SquadApp.updateKey(\'' + pk + '\',' + index + ',\'model\',this.value)">' + modelOptions + '</select>';
+            html += '<input type="text" class="squad-custom-model-input" placeholder="Custom model (optional)" value="' + escHtml(keyData.custom_model || '') + '" onchange="SquadApp.updateKey(\'' + pk + '\',' + index + ',\'custom_model\',this.value)" />';
+            html += '<div class="squad-key-actions">';
             html += refreshButton;
-            html += '  <button type="button" class="aiwire-btn" title="Test this key" onclick="AiWireApp.testKey(\'' + pk + '\',' + index + ')"><i class="fa fa-plug"></i></button>';
-            html += '  <button type="button" class="aiwire-btn aiwire-btn-danger" title="Remove" onclick="AiWireApp.removeKey(\'' + pk + '\',' + index + ')"><i class="fa fa-trash"></i></button>';
+            html += '  <button type="button" class="squad-btn" title="Test this key" onclick="SquadApp.testKey(\'' + pk + '\',' + index + ')"><i class="fa fa-plug"></i></button>';
+            html += '  <button type="button" class="squad-btn squad-btn-danger" title="Remove" onclick="SquadApp.removeKey(\'' + pk + '\',' + index + ')"><i class="fa fa-trash"></i></button>';
             html += '</div>';
             html += '</div>';
             return html;
@@ -2012,7 +2040,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         function toggleProvider(pk) {
-            var body = document.getElementById('aiwire-body-' + pk);
+            var body = document.getElementById('squad-body-' + pk);
             if (body) body.classList.toggle('collapsed');
         }
 
@@ -2030,14 +2058,14 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             render();
 
             // Expand the section
-            var body = document.getElementById('aiwire-body-' + pk);
+            var body = document.getElementById('squad-body-' + pk);
             if (body) body.classList.remove('collapsed');
 
             // Focus the new key input
-            var rows = document.querySelectorAll('[id^="aiwire-row-' + pk + '-"]');
+            var rows = document.querySelectorAll('[id^="squad-row-' + pk + '-"]');
             if (rows.length) {
                 var lastRow = rows[rows.length - 1];
-                var input = lastRow.querySelector('.aiwire-key-input');
+                var input = lastRow.querySelector('.squad-key-input');
                 if (input) input.focus();
             }
         }
@@ -2079,7 +2107,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 url: moduleUrl,
                 type: 'POST',
                 data: Object.assign({}, csrfFields, {
-                    aiwire_action: 'test_key',
+                    squad_action: 'test_key',
                     provider: pk,
                     api_key: keyData.key
                 }),
@@ -2111,7 +2139,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 url: moduleUrl,
                 type: 'POST',
                 data: Object.assign({}, csrfFields, {
-                    aiwire_action: 'refresh_models',
+                    squad_action: 'refresh_models',
                     provider: pk,
                     key_index: index,
                     api_key: keyData.key
@@ -2138,21 +2166,21 @@ class AiWire extends WireData implements Module, ConfigurableModule {
 
         function setDirty() {
             dirty = true;
-            var bar = document.getElementById('aiwire-save-bar');
+            var bar = document.getElementById('squad-save-bar');
             bar.classList.remove('hidden', 'saved');
-            document.getElementById('aiwire-save-status').textContent = 'Unsaved changes';
+            document.getElementById('squad-save-status').textContent = 'Unsaved changes';
             syncHiddenField();
         }
 
         function syncHiddenField() {
             // Keys are saved via "Save All Keys" → encrypted table; never write
             // them into the config form field (would persist plaintext in the DB).
-            var hidden = document.getElementById('aiwire-providers-data');
+            var hidden = document.getElementById('squad-providers-data');
             if (hidden) hidden.value = '{}';
         }
 
         function syncProviderModelsField(pk, models, updated) {
-            var hidden = document.getElementById('aiwire-provider-models-data');
+            var hidden = document.getElementById('squad-provider-models-data');
             if (!hidden) return;
 
             var data = {};
@@ -2166,8 +2194,8 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         }
 
         function saveAll() {
-            var btn = document.getElementById('aiwire-save-btn');
-            var status = document.getElementById('aiwire-save-status');
+            var btn = document.getElementById('squad-save-btn');
+            var status = document.getElementById('squad-save-status');
             btn.disabled = true;
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving...';
 
@@ -2175,7 +2203,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 url: moduleUrl,
                 type: 'POST',
                 data: Object.assign({}, csrfFields, {
-                    aiwire_action: 'save_keys',
+                    squad_action: 'save_keys',
                     keys_data: JSON.stringify(currentKeys)
                 }),
                 dataType: 'json',
@@ -2184,7 +2212,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
             .done(function(response) {
                 if (response.success) {
                     dirty = false;
-                    var bar = document.getElementById('aiwire-save-bar');
+                    var bar = document.getElementById('squad-save-bar');
                     bar.classList.add('saved');
                     status.textContent = 'Saved!';
                     syncHiddenField();
@@ -2230,7 +2258,7 @@ HTML;
      * Render Test Chat UI
      */
     protected function renderTestChatUI(): string {
-        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
+        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=Squad';
         $providers = $this->getAllProviderKeys();
         $providerDefinitions = $this->getProviderDefinitions();
         $moduleUrlJs = $this->jsonScript($moduleUrl);
@@ -2272,56 +2300,56 @@ HTML;
         $defaultKeyJson = $this->_keyOptionsJson ?? '{}';
 
         return <<<HTML
-<div id="aiwire-test-chat" style="margin: 10px 0;">
+<div id="squad-test-chat" style="margin: 10px 0;">
     <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-        <select id="aiwire-test-provider" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 160px;" onchange="AiWireTestUpdateSelects()">
+        <select id="squad-test-provider" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 160px;" onchange="SquadTestUpdateSelects()">
         </select>
-        <select id="aiwire-test-key" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px;" onchange="AiWireTestUpdateModel()">
+        <select id="squad-test-key" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px;" onchange="SquadTestUpdateModel()">
         </select>
-        <select id="aiwire-test-model" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px;">
+        <select id="squad-test-model" style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px;">
         </select>
     </div>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <input type="text" id="aiwire-test-message" placeholder="Type a test message..." 
+        <input type="text" id="squad-test-message" placeholder="Type a test message..." 
                value="What is the safest city in the United States and why?" 
                style="flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;" />
-        <button type="button" class="aiwire-btn aiwire-btn-primary" id="aiwire-test-send-btn" onclick="AiWireTestChat()">
+        <button type="button" class="squad-btn squad-btn-primary" id="squad-test-send-btn" onclick="SquadTestChat()">
             <i class="fa fa-paper-plane"></i> Send
         </button>
     </div>
     <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;">
         <label style="font-size: 12px; color: #666;">
             Temperature
-            <input type="number" id="aiwire-test-temperature" value="1" min="0" max="2" step="0.1"
+            <input type="number" id="squad-test-temperature" value="1" min="0" max="2" step="0.1"
                    style="width: 60px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;" />
         </label>
         <label style="font-size: 12px; color: #666;">
             Max Tokens
-            <input type="number" id="aiwire-test-tokens" value="1024" min="1" max="32000" step="1"
+            <input type="number" id="squad-test-tokens" value="1024" min="1" max="32000" step="1"
                    style="width: 75px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;" />
         </label>
         <label style="font-size: 12px; color: #666;">
             Timeout
-            <input type="number" id="aiwire-test-timeout" value="30" min="5" max="300" step="1"
+            <input type="number" id="squad-test-timeout" value="30" min="5" max="300" step="1"
                    style="width: 55px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;" />
             <span style="font-size: 11px;">sec</span>
         </label>
     </div>
-    <div id="aiwire-test-response" style="display:none; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; white-space: pre-wrap; font-size: 13px;"></div>
-    <div id="aiwire-test-cache-badge" style="display:none; margin-top: 8px; font-size: 12px; padding: 3px 10px; border-radius: 10px; font-weight: 600; width: fit-content;"></div>
+    <div id="squad-test-response" style="display:none; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; white-space: pre-wrap; font-size: 13px;"></div>
+    <div id="squad-test-cache-badge" style="display:none; margin-top: 8px; font-size: 12px; padding: 3px 10px; border-radius: 10px; font-weight: 600; width: fit-content;"></div>
 </div>
 <script>
-var _aiwireTestData = {$providerKeysJson};
-var _aiwireTestDefault = {$defaultProviderJson};
-var _aiwireTestUrl = {$moduleUrlJs};
-var _aiwireTestCsrf = {$csrfFieldsJson};
+var _squadTestData = {$providerKeysJson};
+var _squadTestDefault = {$defaultProviderJson};
+var _squadTestUrl = {$moduleUrlJs};
+var _squadTestCsrf = {$csrfFieldsJson};
 
-function AiWireTestUpdateSelects() {
-    var providerSel = document.getElementById('aiwire-test-provider');
-    var keySel = document.getElementById('aiwire-test-key');
-    var modelSel = document.getElementById('aiwire-test-model');
+function SquadTestUpdateSelects() {
+    var providerSel = document.getElementById('squad-test-provider');
+    var keySel = document.getElementById('squad-test-key');
+    var modelSel = document.getElementById('squad-test-model');
     var pk = providerSel.value;
-    var data = _aiwireTestData[pk];
+    var data = _squadTestData[pk];
 
     // Update keys dropdown
     keySel.innerHTML = '';
@@ -2340,15 +2368,15 @@ function AiWireTestUpdateSelects() {
     }
 
     // Update models dropdown
-    AiWireTestUpdateModel();
+    SquadTestUpdateModel();
 }
 
-function AiWireTestUpdateModel() {
-    var providerSel = document.getElementById('aiwire-test-provider');
-    var keySel = document.getElementById('aiwire-test-key');
-    var modelSel = document.getElementById('aiwire-test-model');
+function SquadTestUpdateModel() {
+    var providerSel = document.getElementById('squad-test-provider');
+    var keySel = document.getElementById('squad-test-key');
+    var modelSel = document.getElementById('squad-test-model');
     var pk = providerSel.value;
-    var data = _aiwireTestData[pk];
+    var data = _squadTestData[pk];
 
     // Get selected key's model as default
     var selectedOpt = keySel.options[keySel.selectedIndex];
@@ -2366,29 +2394,29 @@ function AiWireTestUpdateModel() {
 
 // Init provider select
 (function() {
-    var providerSel = document.getElementById('aiwire-test-provider');
+    var providerSel = document.getElementById('squad-test-provider');
     providerSel.innerHTML = '';
-    for (var pk in _aiwireTestData) {
+    for (var pk in _squadTestData) {
         var opt = document.createElement('option');
         opt.value = pk;
-        opt.textContent = _aiwireTestData[pk].label;
-        if (pk === _aiwireTestDefault) opt.selected = true;
+        opt.textContent = _squadTestData[pk].label;
+        if (pk === _squadTestDefault) opt.selected = true;
         providerSel.appendChild(opt);
     }
-    AiWireTestUpdateSelects();
+    SquadTestUpdateSelects();
 })();
 
-function AiWireTestChat() {
-    var provider = document.getElementById('aiwire-test-provider').value;
-    var keyIndex = document.getElementById('aiwire-test-key').value;
-    var model = document.getElementById('aiwire-test-model').value;
-    var message = document.getElementById('aiwire-test-message').value;
-    var temperature = document.getElementById('aiwire-test-temperature').value;
-    var maxTokens = document.getElementById('aiwire-test-tokens').value;
-    var timeout = document.getElementById('aiwire-test-timeout').value;
-    var resultEl = document.getElementById('aiwire-test-response');
-    var badgeEl = document.getElementById('aiwire-test-cache-badge');
-    var btn = document.getElementById('aiwire-test-send-btn');
+function SquadTestChat() {
+    var provider = document.getElementById('squad-test-provider').value;
+    var keyIndex = document.getElementById('squad-test-key').value;
+    var model = document.getElementById('squad-test-model').value;
+    var message = document.getElementById('squad-test-message').value;
+    var temperature = document.getElementById('squad-test-temperature').value;
+    var maxTokens = document.getElementById('squad-test-tokens').value;
+    var timeout = document.getElementById('squad-test-timeout').value;
+    var resultEl = document.getElementById('squad-test-response');
+    var badgeEl = document.getElementById('squad-test-cache-badge');
+    var btn = document.getElementById('squad-test-send-btn');
 
     badgeEl.style.display = 'none';
 
@@ -2410,10 +2438,10 @@ function AiWireTestChat() {
     var ajaxTimeout = (parseInt(timeout) || 30) * 1000 + 5000; // server timeout + 5s buffer
 
     jQuery.ajax({
-        url: _aiwireTestUrl,
+        url: _squadTestUrl,
         type: 'POST',
-        data: Object.assign({}, _aiwireTestCsrf, {
-            aiwire_action: 'test_chat',
+        data: Object.assign({}, _squadTestCsrf, {
+            squad_action: 'test_chat',
             provider: provider,
             key_index: keyIndex,
             model: model,
@@ -2489,7 +2517,7 @@ HTML;
      */
     protected function renderCacheUI(): string {
         $stats = $this->cache->getStats();
-        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=AiWire';
+        $moduleUrl = $this->wire('config')->urls->admin . 'module/edit?name=Squad';
         $moduleUrlJs = $this->jsonScript($moduleUrl);
         $csrfFieldsJson = $this->getCsrfFieldsJson();
 
@@ -2504,25 +2532,25 @@ HTML;
         <tr><td><strong>Expired (pending cleanup)</strong></td><td>{$stats['expired']}</td></tr>
     </table>
     <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
-        <button type="button" class="aiwire-btn aiwire-btn-danger" id="aiwire-clear-cache-btn" onclick="AiWireClearCache()">
+        <button type="button" class="squad-btn squad-btn-danger" id="squad-clear-cache-btn" onclick="SquadClearCache()">
             <i class="fa fa-trash"></i> Clear All Cache
         </button>
-        <span id="aiwire-cache-status" style="font-size: 13px;"></span>
+        <span id="squad-cache-status" style="font-size: 13px;"></span>
     </div>
 </div>
 <script>
-var _aiwireCacheUrl = {$moduleUrlJs};
-var _aiwireCacheCsrf = {$csrfFieldsJson};
-function AiWireClearCache() {
-    if (!confirm('Clear all AiWire cached responses?')) return;
-    var btn = document.getElementById('aiwire-clear-cache-btn');
-    var status = document.getElementById('aiwire-cache-status');
+var _squadCacheUrl = {$moduleUrlJs};
+var _squadCacheCsrf = {$csrfFieldsJson};
+function SquadClearCache() {
+    if (!confirm('Clear all Squad cached responses?')) return;
+    var btn = document.getElementById('squad-clear-cache-btn');
+    var status = document.getElementById('squad-cache-status');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Clearing...';
     jQuery.ajax({
-        url: _aiwireCacheUrl,
+        url: _squadCacheUrl,
         type: 'POST',
-        data: Object.assign({}, _aiwireCacheCsrf, { aiwire_action: 'clear_cache' }),
+        data: Object.assign({}, _squadCacheCsrf, { squad_action: 'clear_cache' }),
         dataType: 'json',
         timeout: 10000
     })
@@ -2559,14 +2587,14 @@ HTML;
      */
     public function log($message, array $options = []) {
         if (!$this->enableLogging) return;
-        $this->wire('log')->save($this->logName ?: 'aiwire', $message, $options);
+        $this->wire('log')->save($this->logName ?: 'squad', $message, $options);
     }
 
     /**
      * Log an error
      */
     public function logError(string $message) {
-        $this->wire('log')->save(($this->logName ?: 'aiwire') . '-errors', $message);
+        $this->wire('log')->save(($this->logName ?: 'squad') . '-errors', $message);
     }
 
     /**
@@ -2574,7 +2602,7 @@ HTML;
      */
     public function debugLog(string $message) {
         if (!$this->enableDebugLogging) return;
-        $this->wire('log')->save(($this->logName ?: 'aiwire') . '-debug', $message);
+        $this->wire('log')->save(($this->logName ?: 'squad') . '-debug', $message);
     }
 
     /**

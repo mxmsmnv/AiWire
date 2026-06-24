@@ -1,4 +1,4 @@
-# AiWire — Full Documentation
+# Squad — Full Documentation
 
 > ProcessWire AI Integration Module — complete API reference, 25 real-world examples, and implementation guides.
 >
@@ -63,7 +63,7 @@
 Returns just the AI response text. Empty string on error. Use this for simple cases where you just need the answer.
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $text = $ai->chat('Suggest a tagline for a bakery website');
 // "Fresh from our oven to your table — taste the difference."
@@ -112,7 +112,7 @@ $results = $ai->askMultiple('What is love?', ['anthropic', 'openai', 'xai']);
 // $results['anthropic'] => [...], $results['openai'] => [...], etc.
 ```
 
-### `getProvider(string $providerKey, ?string $specificKey, ?int $keyIndex): ?AiWireProvider`
+### `getProvider(string $providerKey, ?string $specificKey, ?int $keyIndex): ?SquadProvider`
 
 Get a raw provider instance for advanced usage.
 
@@ -130,7 +130,7 @@ $status = $ai->getProvidersStatus();
 // ['anthropic' => ['label' => 'Anthropic (Claude)', 'active' => true, 'keyCount' => 2], ...]
 ```
 
-### `cache(): AiWireCache`
+### `cache(): SquadCache`
 
 Get the cache instance for direct access.
 
@@ -146,7 +146,7 @@ $ai->clearCache(0);         // clear global cache (no page context)
 
 ### `clearAllCache(): int`
 
-Clear all AiWire cached responses across all pages.
+Clear all Squad cached responses across all pages.
 
 ### `cacheStats(): array`
 
@@ -372,7 +372,7 @@ All examples below are based on a real-world alcohol/spirits catalog site ([lqrs
 
 ```php
 // site/templates/product.php — e.g. "2015 Louis Roederer Cristal"
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 $body = strip_tags($page->body);
 
 $results = $ai->generate($page, [
@@ -473,7 +473,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'product') return;
     if (!$page->isChanged('title') && !$page->isChanged('body')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     $ai->askAndSave($page, [
         'seo_description' => "Write an SEO meta description (max 155 chars) for this product listing. "
@@ -521,7 +521,7 @@ Editor sees a notification: *"AI generated SEO fields"*. Both fields are editabl
 
 ```php
 // site/templates/brand.php — e.g. "Chivas Regal", "Louis Roederer"
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $productList = '';
 foreach ($page->children("limit=20") as $p) {
@@ -598,7 +598,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'category') return;
     if ($page->ai_description) return; // already has content
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
     $productCount = $page->children->count();
     $topProducts = $page->children("sort=-views, limit=5")->implode(', ', 'title');
 
@@ -647,7 +647,7 @@ ai_description:
 
 ```php
 // site/templates/cocktail.php — e.g. "Freddie Bartholomew", "Arnold Palmer Mocktail"
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $ingredients = $page->ingredients->implode(', ', 'title'); // RepeaterMatrix or PageArray
 
@@ -728,7 +728,7 @@ ai_recipe_variations:
 
 ```php
 // site/templates/region.php — e.g. "Champagne", "Tuscany", "Islay"
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $products = $pages->find("template=product, region={$page->id}, limit=30");
 $productList = $products->implode("\n", function($p) {
@@ -793,7 +793,7 @@ ai_region_recommendations:
 
 ```php
 // site/templates/product.php — summarize user reviews
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $reviews = $page->reviews; // RepeaterMatrix: rating, body, author
 if ($reviews->count() >= 3) {
@@ -850,7 +850,7 @@ $wire->addHookBefore('Pages::saveReady', function(HookEvent $event) {
     if ($page->template->name !== 'review') return;
     if (!$page->isChanged('body')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     $result = $ai->ask(
         "Analyze this product review for an alcohol/spirits store. Check for:\n"
@@ -910,7 +910,7 @@ Safe reviews pass through without any changes. Only flagged reviews require mode
 ```php
 // site/ready.php — translate product descriptions into multiple languages
 function translateProducts() {
-    $ai = wire('modules')->get('AiWire');
+    $ai = wire('modules')->get('Squad');
     $products = wire('pages')->find("template=product, body!='', body_es='', limit=20");
 
     $languages = [
@@ -983,7 +983,7 @@ LazyCron processes 20 products per hour — a 500-product catalog is fully trans
 // site/templates/api/ai-sommelier.php
 header('Content-Type: application/json');
 
-$ai       = $modules->get('AiWire');
+$ai       = $modules->get('Squad');
 $question = $input->post->text('question');
 $history  = $session->get('sommelier_history') ?: [];
 
@@ -1071,7 +1071,7 @@ echo json_encode([
 ```php
 // site/ready.php — generate tasting notes for products that don't have them
 $wire->addHook('LazyCron::every6Hours', function() {
-    $ai = wire('modules')->get('AiWire');
+    $ai = wire('modules')->get('Squad');
     $products = wire('pages')->find("template=product, tasting_notes='', limit=10");
 
     foreach ($products as $p) {
@@ -1122,7 +1122,7 @@ tasting_notes:
 // site/templates/api/gift-finder.php
 header('Content-Type: application/json');
 
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $occasion = $input->post->text('occasion');  // birthday, anniversary, holiday...
 $budget   = $input->post->text('budget');     // 30-50, 50-100, 100+
@@ -1204,7 +1204,7 @@ echo json_encode([
 
 ```php
 // site/templates/compare.php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $ids = $input->get->intArray('products'); // ?products=1042,1043,1044
 $products = $pages->getById($ids);
@@ -1278,7 +1278,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'product') return;
     if ($page->ai_tags->count()) return; // already tagged
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     $result = $ai->ask(
         "Analyze this product and assign relevant tags for filtering in an online store.\n\n"
@@ -1351,7 +1351,7 @@ Tags that already exist are reused; new ones are created under `/tags/`. Product
 ```php
 // site/ready.php — weekly digest email with AI-generated summary
 $wire->addHook('LazyCron::everyWeek', function() {
-    $ai    = wire('modules')->get('AiWire');
+    $ai    = wire('modules')->get('Squad');
     $since = date('Y-m-d', strtotime('-7 days'));
 
     $newProducts = wire('pages')->find("template=product, created>={$since}");
@@ -1423,7 +1423,7 @@ Lagavulin 16. Cheers to a great week of discoveries!"
 // site/templates/api/chatbot.php
 header('Content-Type: application/json');
 
-$ai      = $modules->get('AiWire');
+$ai      = $modules->get('Squad');
 $message = $input->post->text('message');
 $action  = $input->post->text('action');
 
@@ -1495,7 +1495,7 @@ echo json_encode([
 | File | any template file or Tracy Debugger console |
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $prompt = 'Describe the flavor profile of a 12-year-old single malt Scotch in 3 sentences.';
 $results = $ai->askMultiple($prompt, ['anthropic', 'openai', 'google', 'xai']);
@@ -1543,7 +1543,7 @@ echo "</table>";
 ```php
 // site/ready.php — generate missing AI content across the entire catalog
 $wire->addHook('LazyCron::everyHour', function() {
-    $ai = wire('modules')->get('AiWire');
+    $ai = wire('modules')->get('Squad');
 
     // Products without tasting notes
     $products = wire('pages')->find("template=product, tasting_notes='', limit=10");
@@ -1583,17 +1583,17 @@ $wire->addHook('LazyCron::everyHour', function() {
 **Result** — LazyCron log after one hour:
 
 ```
-[AiWire] askAndSave: saved tasting notes for "Voltage Vodka" (page 1042)
-[AiWire] askAndSave: saved tasting notes for "La Fabrique 70% Vodka" (page 1043)
-[AiWire] askAndSave: saved tasting notes for "Humble Banane Banana Liqueur" (page 1044)
+[Squad] askAndSave: saved tasting notes for "Voltage Vodka" (page 1042)
+[Squad] askAndSave: saved tasting notes for "La Fabrique 70% Vodka" (page 1043)
+[Squad] askAndSave: saved tasting notes for "Humble Banane Banana Liqueur" (page 1044)
 ... (10 products processed)
 
-[AiWire] askAndSave: saved brand history for "Chivas Regal" (page 2001)
-[AiWire] askAndSave: saved brand history for "Mauro Vannucci" (page 2002)
+[Squad] askAndSave: saved brand history for "Chivas Regal" (page 2001)
+[Squad] askAndSave: saved brand history for "Mauro Vannucci" (page 2002)
 ... (5 brands processed)
 
-[AiWire] askAndSave: saved category description for "Vodka" (page 3001)
-[AiWire] askAndSave: saved category description for "Liqueurs & Cordials" (page 3002)
+[Squad] askAndSave: saved category description for "Vodka" (page 3001)
+[Squad] askAndSave: saved category description for "Liqueurs & Cordials" (page 3002)
 ... (5 categories processed)
 ```
 
@@ -1620,7 +1620,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'product') return;
     if (!$page->hasField('images')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     foreach ($page->images as $image) {
         if ($image->description) continue;
@@ -1681,7 +1681,7 @@ Alt texts appear in `<img alt="...">` tags — improving SEO and accessibility s
 ```php
 $wire->addHookAfter('FormBuilder::processReady', function(HookEvent $event) {
     $form  = $event->arguments(0);
-    $ai    = wire('modules')->get('AiWire');
+    $ai    = wire('modules')->get('Squad');
 
     $message = $form->get('message')->value;
     $email   = $form->get('email')->value;
@@ -1759,7 +1759,7 @@ Sales inquiries go to sales@, support tickets go to support@, wholesale requests
 
 ```php
 // site/templates/product.php — cost-optimized content generation
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $results = $ai->generate($page, [
     // TIER 1: Complex creative writing → premium model
@@ -1852,7 +1852,7 @@ Estimated cost per product page: ~$0.003 vs ~$0.015 with premium model only.
 
 ```php
 // site/templates/product.php — bulletproof AI content delivery
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Check if content already exists
 $existing = $ai->loadFrom($page, 'ai_overview');
@@ -1916,7 +1916,7 @@ if ($result['success']) {
 
 ```php
 // site/templates/admin-ai-dashboard.php — AI provider health dashboard
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // ── 1. Check all providers status ──
 $status = $ai->getProvidersStatus();
@@ -1991,7 +1991,7 @@ Cleared 4 cache entries for 'Lagavulin 16 Year Old'
 ### 24. Smart cache strategy with page context
 
 > **Problem:** Cached AI content should be page-specific (different product = different cache entry), but some prompts are reusable across pages. You also need to invalidate cache when editors update content.
-> AiWire's cache supports page-scoped keys, TTL levels, and hook-based invalidation.
+> Squad's cache supports page-scoped keys, TTL levels, and hook-based invalidation.
 
 **ProcessWire setup:**
 
@@ -2004,7 +2004,7 @@ Cleared 4 cache entries for 'Lagavulin 16 Year Old'
 ```php
 // site/templates/product.php — cache strategies
 
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // ── Page-scoped cache: same prompt returns different results per product ──
 $overview = $ai->chat(
@@ -2050,7 +2050,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'product') return;
     if (!$page->isChanged('body') && !$page->isChanged('tasting_notes')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     // Clear only this product's cached AI content
     $cleared = $ai->clearCache($page);
@@ -2093,7 +2093,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 
 ### 25. Use specific key by index for team/environment separation
 
-> **Problem:** Different teams (marketing, SEO, dev) share the same AiWire module but need separate API keys for billing, rate limits, and access control.
+> **Problem:** Different teams (marketing, SEO, dev) share the same Squad module but need separate API keys for billing, rate limits, and access control.
 > `keyIndex` lets you assign specific keys to specific tasks, and key labels in the admin make it clear which key is which.
 
 **ProcessWire setup:**
@@ -2104,7 +2104,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 | File | `site/ready.php` + templates |
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // ── Marketing team: use key #1 for promotional content ──
 $promo = $ai->ask(
@@ -2181,7 +2181,7 @@ Add multiple API keys per provider in the admin panel. This enables load distrib
 ### Use a specific key by index
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Keys are 0-indexed in the order they appear in admin
 $result = $ai->ask('Hello', [
@@ -2193,7 +2193,7 @@ $result = $ai->ask('Hello', [
 ### Automatic fallback
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Tries all Anthropic keys → all OpenAI keys → all Google keys
 $result = $ai->askWithFallback('Summarize this document...', [
@@ -2215,7 +2215,7 @@ if ($result['success']) {
 
 ## Admin Interface
 
-The configuration page (`Modules → Configure → AiWire`) includes:
+The configuration page (`Modules → Configure → Squad`) includes:
 
 - **API Keys & Providers** — add, remove, enable/disable keys per provider with AJAX save
 - **Connection Test** — one-click test button per key shows green ✅ / red ❌ status
@@ -2231,12 +2231,12 @@ The configuration page (`Modules → Configure → AiWire`) includes:
 
 ## Cache System
 
-AiWire includes a file-based cache that stores AI responses to avoid repeated API calls. This is essential for page rendering — without cache, every page load would wait for an AI response.
+Squad includes a file-based cache that stores AI responses to avoid repeated API calls. This is essential for page rendering — without cache, every page load would wait for an AI response.
 
-Cache files are stored in `site/assets/cache/AiWire/` organized by page ID:
+Cache files are stored in `site/assets/cache/Squad/` organized by page ID:
 
 ```
-site/assets/cache/AiWire/
+site/assets/cache/Squad/
 ├── 0/              # global (no page context)
 │   └── a1b2c3.json
 ├── 1042/           # page ID 1042
@@ -2261,7 +2261,7 @@ site/assets/cache/AiWire/
 ### Basic usage
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Cache for 1 week — identical request returns instantly from cache
 $result = $ai->ask('Write a tagline for our bakery', [
@@ -2278,7 +2278,7 @@ When used in page templates, pass `pageId` so each page gets its own cache:
 
 ```php
 // site/templates/article.php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $summary = $ai->ask("Summarize this article in 2 sentences:\n\n" . $page->body, [
     'cache'       => 'M',        // cache for 1 month
@@ -2311,7 +2311,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     $page = $event->arguments(0);
     if (!$page->isChanged('body')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
     $cleared = $ai->clearCache($page);
 
     if ($cleared) {
@@ -2324,7 +2324,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 
 ```php
 // site/templates/_main.php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $suggestions = $ai->ask(
     "Suggest 3 related topics for this page. Reply as JSON array of strings.\n\n"
@@ -2355,7 +2355,7 @@ if ($suggestions['success']) {
 ### Cache management
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $ai->clearCache($page);       // clear cache for one page
 $ai->clearAllCache();          // clear everything
@@ -2366,7 +2366,7 @@ $stats = $ai->cacheStats();
 
 ### Automatic cleanup
 
-Expired cache files are cleaned up automatically once per day via ProcessWire's LazyCron. You can also clear all cache from admin at `Modules → Configure → AiWire → Cache`.
+Expired cache files are cleaned up automatically once per day via ProcessWire's LazyCron. You can also clear all cache from admin at `Modules → Configure → Squad → Cache`.
 
 ---
 
@@ -2374,7 +2374,7 @@ Expired cache files are cleaned up automatically once per day via ProcessWire's 
 
 ## Field Storage
 
-AiWire can save AI responses directly into page fields. Unlike cache (temporary files), field storage is permanent — content survives cache expiry, is editable by users in the admin, and is searchable via PW selectors.
+Squad can save AI responses directly into page fields. Unlike cache (temporary files), field storage is permanent — content survives cache expiry, is editable by users in the admin, and is searchable via PW selectors.
 
 **Cache vs Field**: use cache for repeated runtime calls (rendering). Use field storage when AI content becomes part of the page data (SEO descriptions, summaries, translations).
 
@@ -2383,7 +2383,7 @@ AiWire can save AI responses directly into page fields. Unlike cache (temporary 
 Save content to a page field. Accepts a string or a full `ask()` result array.
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // Save a string
 $ai->saveTo($page, 'ai_summary', 'This is a great article about cats.');
@@ -2409,7 +2409,7 @@ if ($summary) {
 The main convenience method. Checks the field first — if content exists, returns it instantly. If empty, calls AI, saves the result to the field, and returns it.
 
 ```php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $result = $ai->askAndSave($page, 'ai_summary',
     "Write a 2-sentence summary of this article:\n\n" . $page->body,
@@ -2439,7 +2439,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'article') return;
     if (!$page->isChanged('body')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     // Always regenerate when body changes
     $ai->askAndSave($page, 'seo_description',
@@ -2472,7 +2472,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'article') return;
     if (!$page->isChanged('body')) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
     $body = mb_substr(strip_tags($page->body), 0, 2000);
 
     $results = $ai->askAndSave($page, [
@@ -2495,7 +2495,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 
 ```php
 // site/templates/article.php
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 // First visit: AI generates and saves. Every visit after: instant from field.
 $result = $ai->askAndSave($page, 'ai_summary',
@@ -2511,7 +2511,7 @@ echo "<div class='summary'>{$result['content']}</div>";
 ```php
 // site/ready.php
 $wire->addHook('LazyCron::everyHour', function() {
-    $ai = wire('modules')->get('AiWire');
+    $ai = wire('modules')->get('Squad');
     $pages = wire('pages')->find("template=product, ai_description=''");
 
     foreach ($pages as $p) {
@@ -2529,7 +2529,7 @@ For pages where each AI block needs its own prompt, provider, or settings:
 
 ```php
 // site/templates/product.php — e.g. "2015 Louis Roederer Cristal"
-$ai = $modules->get('AiWire');
+$ai = $modules->get('Squad');
 
 $results = $ai->generate($page, [
     [
@@ -2598,7 +2598,7 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
     if ($page->template->name !== 'product') return;
     if (!$page->isChanged()) return;
 
-    $ai = $this->modules->get('AiWire');
+    $ai = $this->modules->get('Squad');
 
     $ai->generate($page, [
         ['field' => 'ai_overview',       'prompt' => "Write overview for: {$page->title}..."],
@@ -2623,13 +2623,13 @@ $wire->addHookAfter('Pages::saved', function(HookEvent $event) {
 
 ## Logging
 
-AiWire writes to ProcessWire's log system. View logs at **Setup → Logs**.
+Squad writes to ProcessWire's log system. View logs at **Setup → Logs**.
 
 | Log file | Content |
 |----------|---------|
-| `aiwire` | Successful responses with provider/model/token info |
-| `aiwire-errors` | Failed requests, API errors |
-| `aiwire-debug` | Detailed request/response data (when debug enabled) |
+| `squad` | Successful responses with provider/model/token info |
+| `squad-errors` | Failed requests, API errors |
+| `squad-debug` | Detailed request/response data (when debug enabled) |
 
 Enable debug logging in module config for troubleshooting. Disable it in production.
 
