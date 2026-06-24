@@ -120,7 +120,7 @@ class AiWireProvider {
 
         // Build request based on provider type
         if ($this->providerKey === 'anthropic') {
-            return $this->sendAnthropic($message, $model, $systemPrompt, $maxTokens, $temperature, $history);
+            return $this->sendAnthropic($message, $model, $systemPrompt, $maxTokens, $temperature, $history, !empty($options['cachePrompt']));
         }
 
         // OpenAI-compatible: openai, google, xai, openrouter
@@ -130,7 +130,7 @@ class AiWireProvider {
     /**
      * Send request to Anthropic Messages API
      */
-    protected function sendAnthropic(string $message, string $model, string $systemPrompt, int $maxTokens, float $temperature, array $history): array {
+    protected function sendAnthropic(string $message, string $model, string $systemPrompt, int $maxTokens, float $temperature, array $history, bool $cachePrompt = false): array {
         $messages = [];
 
         // Add history
@@ -153,9 +153,18 @@ class AiWireProvider {
             'messages'   => $messages,
         ];
 
-        // Anthropic uses 'system' as a top-level parameter
+        // Anthropic uses 'system' as a top-level parameter. With prompt caching, send
+        // it as a content block marked cache_control so the prefix is cached server-side.
         if ($systemPrompt) {
-            $body['system'] = $systemPrompt;
+            if ($cachePrompt) {
+                $body['system'] = [[
+                    'type'          => 'text',
+                    'text'          => $systemPrompt,
+                    'cache_control' => ['type' => 'ephemeral'],
+                ]];
+            } else {
+                $body['system'] = $systemPrompt;
+            }
         }
 
         // temperature for Anthropic
@@ -202,13 +211,15 @@ class AiWireProvider {
             }
         }
 
-        // Extract usage
+        // Extract usage (incl. prompt-cache tokens when caching is active)
         $usage = [];
         if (isset($data['usage'])) {
             $usage = [
-                'input_tokens'  => $data['usage']['input_tokens'] ?? 0,
-                'output_tokens' => $data['usage']['output_tokens'] ?? 0,
-                'total_tokens'  => ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0),
+                'input_tokens'          => $data['usage']['input_tokens'] ?? 0,
+                'output_tokens'         => $data['usage']['output_tokens'] ?? 0,
+                'total_tokens'          => ($data['usage']['input_tokens'] ?? 0) + ($data['usage']['output_tokens'] ?? 0),
+                'cache_creation_tokens' => $data['usage']['cache_creation_input_tokens'] ?? 0,
+                'cache_read_tokens'     => $data['usage']['cache_read_input_tokens'] ?? 0,
             ];
         }
 

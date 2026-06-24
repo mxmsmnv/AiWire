@@ -474,12 +474,19 @@ class AiWire extends WireData implements Module, ConfigurableModule {
         $timeout     = isset($options['timeout']) ? (int)$options['timeout'] : null;
         $history     = $options['history'] ?? [];
 
+        // Anthropic prompt caching: cache the (large) system prompt so repeated
+        // calls reuse the cached prefix cheaply. On by default for Anthropic when
+        // the system prompt is sizeable; override with options['promptCache'].
+        $cachePrompt = array_key_exists('promptCache', $options)
+            ? (bool)$options['promptCache']
+            : ($providerKey === 'anthropic' && mb_strlen($systemPrompt) >= 3000);
+
         // Apply per-request timeout if specified
         if ($timeout) {
             $provider->setTimeout($timeout);
         }
 
-        $this->debugLog("ask() provider={$providerKey} model={$model} cache=" . ($useCache ? $cacheOption : 'off'));
+        $this->debugLog("ask() provider={$providerKey} model={$model} cache=" . ($useCache ? $cacheOption : 'off') . " promptCache=" . ($cachePrompt ? 'on' : 'off'));
 
         try {
             $result = $provider->sendMessage($message, [
@@ -488,6 +495,7 @@ class AiWire extends WireData implements Module, ConfigurableModule {
                 'maxTokens'    => $maxTokens,
                 'temperature'  => $temperature,
                 'history'      => $history,
+                'cachePrompt'  => $cachePrompt,
             ]);
 
             if ($result['success']) {
