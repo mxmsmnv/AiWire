@@ -130,6 +130,19 @@ class SquadProvider {
     /**
      * Send request to Anthropic Messages API
      */
+    /**
+     * Whether an Anthropic model accepts sampling params (temperature/top_p/top_k).
+     * Opus 4.7 / 4.8 and the Fable/Mythos family reject them with a 400 — they use
+     * adaptive thinking instead. Sonnet 4.6, Opus 4.6 and older still accept them.
+     */
+    protected function anthropicAcceptsSampling(string $model): bool {
+        $m = strtolower($model);
+        foreach (['opus-4-7', 'opus-4-8', 'fable', 'mythos'] as $needle) {
+            if (strpos($m, $needle) !== false) return false;
+        }
+        return true;
+    }
+
     protected function sendAnthropic(string $message, string $model, string $systemPrompt, int $maxTokens, float $temperature, array $history, bool $cachePrompt = false): array {
         $messages = [];
 
@@ -167,8 +180,9 @@ class SquadProvider {
             }
         }
 
-        // temperature for Anthropic
-        if ($temperature > 0) {
+        // temperature for Anthropic — rejected (400) on Opus 4.7/4.8 and Fable/Mythos,
+        // which use adaptive thinking instead of sampling params. Omit it for those.
+        if ($temperature > 0 && $this->anthropicAcceptsSampling($model)) {
             $body['temperature'] = $temperature;
         }
 
@@ -473,7 +487,7 @@ class SquadProvider {
         // plain string, which Anthropic also accepts.
         $body = ['model' => $model, 'max_tokens' => $maxTokens, 'messages' => $messages];
         if ($systemPrompt !== '') $body['system'] = $systemPrompt;
-        if ($temperature > 0) $body['temperature'] = $temperature;
+        if ($temperature > 0 && $this->anthropicAcceptsSampling($model)) $body['temperature'] = $temperature;
         if ($toolDefs) {
             $body['tools'] = array_map(fn($t) => [
                 'name'         => $t['name'] ?? '',
