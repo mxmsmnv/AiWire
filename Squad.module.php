@@ -77,6 +77,13 @@ class Squad extends WireData implements Module, ConfigurableModule {
                 'gpt-5.2'      => 'GPT-5.2',
                 'gpt-4.1'      => 'GPT-4.1',
             ],
+            // embeddings
+            'embedUrl'          => 'https://api.openai.com/v1/embeddings',
+            'defaultEmbedModel' => 'text-embedding-3-small',
+            'embedModels' => [
+                'text-embedding-3-small' => 'Embedding 3 Small',
+                'text-embedding-3-large' => 'Embedding 3 Large',
+            ],
             // image generation
             'imageUrl'          => 'https://api.openai.com/v1/images/generations',
             'defaultImageModel' => 'gpt-image-1',
@@ -100,6 +107,13 @@ class Squad extends WireData implements Module, ConfigurableModule {
                 'gemini-3-flash'           => 'Gemini 3 Flash',
                 'gemini-3.1-flash-lite'    => 'Gemini 3.1 Flash Lite',
                 'gemini-2.5-flash'         => 'Gemini 2.5 Flash',
+            ],
+            // embeddings
+            'embedUrl'          => 'https://generativelanguage.googleapis.com/v1beta/openai/embeddings',
+            'defaultEmbedModel' => 'gemini-embedding-001',
+            'embedModels' => [
+                'gemini-embedding-001' => 'Gemini Embedding 001',
+                'text-embedding-004'   => 'Text Embedding 004',
             ],
         ],
         'xai' => [
@@ -208,6 +222,13 @@ class Squad extends WireData implements Module, ConfigurableModule {
                 'qwen-plus'  => 'Qwen Plus',
                 'qwen-turbo' => 'Qwen Turbo',
             ],
+            // embeddings
+            'embedUrl'          => 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/embeddings',
+            'defaultEmbedModel' => 'text-embedding-v4',
+            'embedModels' => [
+                'text-embedding-v4' => 'Text Embedding v4',
+                'text-embedding-v3' => 'Text Embedding v3',
+            ],
         ],
         'moonshot' => [
             'label'        => 'Moonshot (Kimi)',
@@ -241,6 +262,12 @@ class Squad extends WireData implements Module, ConfigurableModule {
                 'glm-4.5'     => 'GLM-4.5',
                 'glm-4.5-air' => 'GLM-4.5 Air',
                 'glm-4-plus'  => 'GLM-4 Plus',
+            ],
+            // embeddings
+            'embedUrl'          => 'https://open.bigmodel.cn/api/paas/v4/embeddings',
+            'defaultEmbedModel' => 'embedding-3',
+            'embedModels' => [
+                'embedding-3' => 'Embedding-3',
             ],
         ],
         'minimax' => [
@@ -834,6 +861,58 @@ class Squad extends WireData implements Module, ConfigurableModule {
         foreach (array_merge(['xai'], array_keys($defs)) as $key) {
             $def = $defs[$key] ?? null;
             if (!$def || empty($def['imageUrl'])) continue;
+            if ($this->getProvider($key)) return $key;
+        }
+        return null;
+    }
+
+    /**
+     * Create embeddings for one string or an array of strings (OpenAI-compatible).
+     *
+     * @param string|array $input text, or array of texts
+     * @param array $options provider, model, timeout, key, keyIndex
+     * @return array ['success','embeddings'=>[[float,...],...],'embedding'=>[float,...]|null,'model','provider','usage','message','raw']
+     */
+    public function embed($input, array $options = []): array {
+        $texts = is_array($input) ? array_values($input) : [(string)$input];
+        $texts = array_values(array_filter(array_map(fn($t) => (string)$t, $texts), fn($t) => $t !== ''));
+        if (!$texts) return $this->errorResponse('Empty embedding input.');
+
+        $providerKey = $options['provider'] ?? $this->getDefaultEmbedProvider();
+        if (!$providerKey) return $this->errorResponse('No embedding-capable provider is configured.');
+
+        $provider = $this->getProvider($providerKey, $options['key'] ?? null, $options['keyIndex'] ?? null);
+        if (!$provider) return $this->errorResponse("No active key for embedding provider '{$providerKey}'.");
+
+        if (!empty($options['timeout'])) $provider->setTimeout((int)$options['timeout']);
+
+        $def = $this->getProviderDefinition($providerKey) ?: [];
+        $opts = array_merge($options, [
+            'embedUrl' => $def['embedUrl'] ?? '',
+            'model'    => $options['model'] ?? ($def['defaultEmbedModel'] ?? ''),
+        ]);
+
+        try {
+            $result = $provider->generateEmbeddings($texts, $opts);
+            if (!empty($result['success'])) {
+                $n = count($result['embeddings'] ?? []);
+                $this->log("Embeddings from {$providerKey}/" . ($result['model'] ?? '?') . " ({$n})");
+                // convenience: a single-string caller gets the lone vector directly
+                $result['embedding'] = (!is_array($input) && $n === 1) ? $result['embeddings'][0] : null;
+            } else {
+                $this->logError("embed() error: " . ($result['message'] ?? 'unknown'));
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            $this->logError("embed() error: " . $e->getMessage());
+            return $this->errorResponse($e->getMessage());
+        }
+    }
+
+    /** The first embedding-capable provider that has an active key. */
+    public function getDefaultEmbedProvider(): ?string {
+        foreach ($this->getProviderDefinitions() as $key => $def) {
+            if (empty($def['embedUrl'])) continue;
             if ($this->getProvider($key)) return $key;
         }
         return null;

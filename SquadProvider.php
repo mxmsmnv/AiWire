@@ -397,6 +397,61 @@ class SquadProvider {
     }
 
     /**
+     * Create embeddings via an OpenAI-compatible /embeddings endpoint.
+     *
+     * @param array $texts list of strings (caller guarantees non-empty)
+     * @param array $options embedUrl, model
+     * @return array ['success','embeddings'=>[[float],...],'model','provider','usage','message','raw']
+     */
+    public function generateEmbeddings(array $texts, array $options = []): array {
+        $embedUrl = (string)($options['embedUrl'] ?? ($this->config['embedUrl'] ?? ''));
+        if ($embedUrl === '') {
+            return ['success' => false, 'embeddings' => [], 'message' => "Provider '{$this->providerKey}' has no embeddings endpoint.", 'raw' => []];
+        }
+        $model = (string)($options['model'] ?? ($this->config['defaultEmbedModel'] ?? $this->model));
+
+        $body = [
+            'model' => $model,
+            // single string when one input — maximally compatible across providers
+            'input' => count($texts) === 1 ? $texts[0] : array_values($texts),
+        ];
+
+        $headers = ['Content-Type: application/json'];
+        if (($this->config['headerType'] ?? 'bearer') === 'bearer') {
+            $headers[] = 'Authorization: Bearer ' . $this->apiKey;
+        } else {
+            $headers[] = 'x-api-key: ' . $this->apiKey;
+        }
+        foreach ($this->config['extraHeaders'] ?? [] as $k => $v) {
+            if ($v !== '') $headers[] = "{$k}: {$v}";
+        }
+
+        $response = $this->curlRequest($embedUrl, $body, $headers);
+        if (!$response['success']) {
+            return ['success' => false, 'embeddings' => [], 'model' => $model, 'provider' => $this->providerKey, 'message' => $response['message'], 'raw' => $response['raw'] ?? ($response['data'] ?? [])];
+        }
+
+        $data = $response['data']['data'] ?? null;
+        if (!is_array($data)) {
+            return ['success' => false, 'embeddings' => [], 'model' => $model, 'provider' => $this->providerKey, 'message' => 'Unexpected embeddings response.', 'raw' => $response['data']];
+        }
+
+        // preserve input order (OpenAI returns an `index` per item)
+        usort($data, fn($a, $b) => ($a['index'] ?? 0) <=> ($b['index'] ?? 0));
+        $embeddings = array_map(fn($d) => $d['embedding'] ?? [], $data);
+
+        return [
+            'success'    => true,
+            'embeddings' => $embeddings,
+            'model'      => $model,
+            'provider'   => $this->providerKey,
+            'usage'      => $response['data']['usage'] ?? [],
+            'message'    => 'OK',
+            'raw'        => $response['data'],
+        ];
+    }
+
+    /**
      * One turn of a tool-use conversation (OpenAI-compatible function calling).
      * Sends messages + tool definitions; returns the assistant turn, including any
      * tool calls the model wants to make. Squad->run() drives the multi-turn loop.
