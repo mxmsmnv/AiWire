@@ -1,6 +1,8 @@
 # Squad — Full Documentation
 
-> ProcessWire AI Integration Module — complete API reference, 25 real-world examples, and implementation guides.
+> Provider-independent AI gateway for ProcessWire — complete API reference, 25 real-world examples, and implementation guides.
+>
+> One API for **14 providers** (Anthropic, OpenAI, Google, xAI, OpenRouter, and the direct Chinese providers DeepSeek, Qwen, Moonshot, Zhipu, MiniMax, 01.AI, Doubao, Ernie, Hunyuan). Text (`chat`/`ask`), embeddings (`embed`), images (`image`), and agentic tool-use (`run`) — plus encrypted key storage, file caching, and field persistence.
 >
 > This document is designed for both **human developers** and **AI coding assistants** (Cursor, Copilot, Claude Code, etc.)
 > to understand the module's full capabilities and implement it correctly.
@@ -14,13 +16,18 @@
   - [askMultiple()](#askmultiplestring-message-array-providers-array-options---array)
   - [askAndSave()](#askandsavepage-page-stringarray-fields-string-message-array-options---array)
   - [generate()](#generatepage-page-array-blocks-array-globaloptions---array)
+  - [embed()](#embedstringarray-input-array-options---array)
+  - [image()](#imagestring-prompt-array-options---array)
+  - [run()](#runarray-options---array)
   - [saveTo()](#savetopage-page-string-fieldname-stringarray-content-bool-quiet---bool)
   - [loadFrom()](#loadfrompage-page-string-fieldname---string)
-  - [getProvider()](#getproviderstring-providerkey-string-specifickey-int-keyindex---aiwreprovider)
+  - [getProvider()](#getproviderstring-providerkey-string-specifickey-int-keyindex---squadprovider)
   - [getProvidersStatus()](#getprovidersstatus---array)
+- [Providers](#providers)
+- [Key Storage & Security](#key-storage--security)
 - [Options](#options)
 - [Result Format](#result-format)
-- [Supported Models](#supported-models-february-2026)
+- [Supported Models](#supported-models)
 - [Usage Examples](#usage-examples)
   - [1. Product page AI content blocks](#1-product-page-ai-content-blocks)
   - [2. Auto-generate SEO on page save](#2-auto-generate-seo-on-page-save)
@@ -194,6 +201,123 @@ $ai->generate($page, [
 
 Returns `['field_name' => result, ...]` with `source: 'field'|'ai'|'error'`.
 
+### `embed(string|array $input, array $options = []): array`
+
+Create embedding vectors for one string or an array of strings. Uses an embedding-capable provider (OpenAI, Google, Qwen, Zhipu) — picks the first configured one unless you pass `'provider'`. A single string returns the lone vector directly in `embedding`; an array returns every vector in `embeddings`.
+
+```php
+$ai = $modules->get('Squad');
+
+// one string
+$res = $ai->embed('How do I reset my password?');
+$vector = $res['embedding'];        // [0.0123, -0.045, …]  (null when input is an array)
+echo count($vector);                // e.g. 1536 / 3072 depending on model
+
+// batch — one API call for all texts
+$res = $ai->embed(['first text', 'second text'], ['provider' => 'google']);
+foreach ($res['embeddings'] as $v) { /* one vector per input, in order */ }
+
+// pick model explicitly
+$ai->embed($text, ['provider' => 'openai', 'model' => 'text-embedding-3-large']);
+```
+
+Result shape:
+
+```php
+[
+    'success'    => true,
+    'embeddings' => [[/* floats */], …],   // one vector per input text, in input order
+    'embedding'  => [/* floats */] | null, // the lone vector iff a single string was passed
+    'model'      => 'gemini-embedding-001',
+    'provider'   => 'google',
+    'usage'      => ['total_tokens' => 42],
+    'message'    => 'OK',
+    'raw'        => [ /* full API response */ ],
+]
+```
+
+> For storage and retrieval (a real RAG pipeline), pair `embed()` with the **[Atlas](https://github.com/mxmsmnv/Atlas)** module, which keeps the vectors and ranks them by cosine similarity. You rarely need to call `embed()` by hand.
+
+### `image(string $prompt, array $options = []): array`
+
+Generate an image from a text prompt. Uses an image-capable provider (xAI Grok Imagine or OpenAI `gpt-image-1`) — defaults to xAI when configured, else the first available. Returns a hosted `url` and/or a base64 payload (`b64`), depending on the provider.
+
+```php
+$res = $ai->image('A minimalist logo of a mountain at sunrise, flat vector style');
+
+if ($res['success']) {
+    $url = $res['url'];   // hosted image URL (xAI)
+    $b64 = $res['b64'];   // base64 data (OpenAI gpt-image-1) — may be empty if a URL is returned
+}
+
+// OpenAI explicitly
+$ai->image('product hero shot on white', ['provider' => 'openai', 'model' => 'gpt-image-1']);
+```
+
+Result shape:
+
+```php
+[
+    'success'  => true,
+    'url'      => 'https://…/generated.png',  // empty if the provider returns base64 only
+    'b64'      => '…',                         // empty if the provider returns a URL only
+    'model'    => 'grok-imagine-image',
+    'provider' => 'xai',
+    'message'  => 'OK',
+    'raw'      => [ /* full API response */ ],
+]
+```
+
+To save the result into a ProcessWire image field, download/decode it and add it to the field as usual (Olivia does this for generated sites).
+
+### `run(array $options = []): array`
+
+Run an **agentic tool-use loop**: you describe tools, the model decides when to call them, you execute each call via an `onTool` callback, and Squad feeds the results back until the model returns a final answer (or `maxSteps` is hit). The provider differences (OpenAI `tool` messages vs Anthropic `tool_result` blocks) are normalized for you.
+
+```php
+$res = $ai->run([
+    'message'  => 'How many products are in the "Whisky" category, and what is the priciest?',
+    'tools'    => [
+        [
+            'name'        => 'count_products',
+            'description' => 'Count published products in a category by name',
+            'parameters'  => [
+                'type'       => 'object',
+                'properties' => ['category' => ['type' => 'string']],
+                'required'   => ['category'],
+            ],
+        ],
+    ],
+    'onTool'   => function (string $name, array $input) {
+        if ($name === 'count_products') {
+            $cat = wire('sanitizer')->selectorValue($input['category']);
+            $items = wire('pages')->find("template=product, category.title=$cat, sort=-price");
+            return ['count' => $items->count(), 'priciest' => (string) $items->first()?->title];
+        }
+        return 'Unknown tool';
+    },
+    'maxSteps' => 6,
+]);
+
+echo $res['content'];   // the model's final natural-language answer
+echo $res['steps'];     // how many model turns it took
+```
+
+`run()` options: `message`/`prompt` or `messages` (full role/content array), `systemPrompt`, `tools` (JSON-schema per tool), `onTool` (`callable(string $name, array $input): string|array` — arrays are JSON-encoded), `maxSteps` (default 6), plus the usual `model`/`provider`/`key`/`keyIndex`/`maxTokens`/`temperature`/`timeout`.
+
+Result shape:
+
+```php
+[
+    'success'  => true,
+    'content'  => 'There are 42 whiskies; the priciest is "…".',
+    'steps'    => 3,            // model turns taken
+    'messages' => [ … ],        // the full transcript (assistant turns + tool results)
+    'usage'    => ['total_tokens' => …],
+    'message'  => 'OK',
+]
+```
+
 ---
 
 ---
@@ -260,13 +384,57 @@ $results = $ai->generate($page, [
 
 ---
 
+## Providers
+
+Squad speaks to **14 providers** through one API. Five are first-class Western providers plus the OpenRouter aggregator; nine are direct Chinese providers (no aggregator in between). Almost all use the OpenAI-compatible chat path, so switching is just a `'provider'` option.
+
+| Key | Label | Chat | Embed | Image |
+|---|---|:---:|:---:|:---:|
+| `anthropic` | Anthropic (Claude) | ✅ | — | — |
+| `openai` | OpenAI (GPT) | ✅ | ✅ | ✅ |
+| `google` | Google (Gemini) | ✅ | ✅ | — |
+| `xai` | xAI (Grok) | ✅ | — | ✅ |
+| `openrouter` | OpenRouter (400+ models, one key) | ✅ | — | — |
+| `deepseek` | DeepSeek | ✅ | — | — |
+| `qwen` | Qwen (Alibaba) | ✅ | ✅ | — |
+| `moonshot` | Moonshot (Kimi) | ✅ | — | — |
+| `zhipu` | Zhipu (GLM) | ✅ | ✅ | — |
+| `minimax` | MiniMax | ✅ | — | — |
+| `yi` | 01.AI (Yi) | ✅ | — | — |
+| `doubao` | Doubao (ByteDance / Volcengine) | ✅ | — | — |
+| `ernie` | Ernie (Baidu Qianfan) | ✅ | — | — |
+| `hunyuan` | Hunyuan (Tencent) | ✅ | — | — |
+
+`embed()` auto-selects the first configured embedding provider; `image()` prefers `xai` then falls back to the first configured image provider. Pass `'provider'` to force a specific one.
+
+---
+
+## Key Storage & Security
+
+API keys are stored **encrypted at rest**. Squad never keeps plaintext keys in the module config:
+
+- Keys live in a dedicated `squad_keys` table, encrypted with **libsodium** secretbox (authenticated encryption).
+- The encryption secret is derived (KDF) from `$config->squadSecret` if set, otherwise from the installation's table salt / user-auth salt — so a leaked database dump alone does not expose usable keys without the site's config secret.
+- For the strongest separation, **don't store the key at all** — reference an environment variable with `env:NAME`:
+
+  ```php
+  // in the admin key field, store:  env:OPENAI_API_KEY
+  // Squad resolves it from the environment at call time; nothing secret hits the DB.
+  ```
+
+- Each provider can hold **multiple labelled keys** with independent enable/disable, used for fallback and team/environment separation (see [Multiple Keys & Fallback](#multiple-keys--fallback)).
+
+> Set `$config->squadSecret` to a long random string in `site/config.php` for the most robust key encryption, and prefer `env:` references in production. Never commit real keys to your repo.
+
+---
+
 ## Options
 
 Every method that accepts `$options` supports these parameters:
 
 | Option              | Type        | Default         | Description |
 |---------------------|-------------|-----------------|-------------|
-| `provider`          | string      | Module default  | `anthropic`, `openai`, `google`, `xai`, `openrouter` |
+| `provider`          | string      | Module default  | Any of the 14 keys — see [Providers](#providers) (`anthropic`, `openai`, `google`, `xai`, `openrouter`, `deepseek`, `qwen`, `moonshot`, `zhipu`, `minimax`, `yi`, `doubao`, `ernie`, `hunyuan`) |
 | `model`             | string      | Key's model     | Override model for this call |
 | `systemPrompt`      | string      | Module default  | System instructions for the AI |
 | `maxTokens`         | int         | 1024            | Max tokens in response |
@@ -283,7 +451,9 @@ Every method that accepts `$options` supports these parameters:
 
 ---
 
-## Supported Models (April 2026)
+## Supported Models
+
+The lists below are the curated defaults shown in the admin model picker (current as of mid-2026). The full, authoritative set lives in `models.json`, and any model the provider accepts can be passed via the `model` option even if it's not listed here.
 
 ### Anthropic (Claude)
 
@@ -347,6 +517,38 @@ Every method that accepts `$options` supports these parameters:
 | Zhipu AI | `z-ai/glm-5` | GLM 5 |
 
 > **Tip:** OpenRouter gives you access to all providers through a single API key. Useful if you want to test different models without managing separate accounts.
+
+### Direct Chinese providers
+
+No aggregator — Squad talks straight to each provider's OpenAI-compatible endpoint. Default model per provider (override with `model`):
+
+| Provider | Key | Default model | A few alternatives |
+|---|---|---|---|
+| DeepSeek | `deepseek` | `deepseek-chat` | `deepseek-reasoner` |
+| Qwen (Alibaba) | `qwen` | `qwen-plus` | `qwen3-max`, `qwen-max`, `qwen-turbo` |
+| Moonshot (Kimi) | `moonshot` | `kimi-k2-0905-preview` | `kimi-k2-turbo-preview`, `kimi-latest` |
+| Zhipu (GLM) | `zhipu` | `glm-4.6` | `glm-4.5`, `glm-4.5-air`, `glm-4-plus` |
+| MiniMax | `minimax` | `MiniMax-M2` | — |
+| 01.AI (Yi) | `yi` | `yi-lightning` | `yi-large` |
+| Doubao (ByteDance) | `doubao` | `doubao-1-5-pro-32k` | `doubao-pro-32k`, `doubao-1-5-lite-32k` |
+| Ernie (Baidu) | `ernie` | `ernie-4.5-turbo-128k` | `ernie-4.0-turbo-8k`, `ernie-speed-128k` |
+| Hunyuan (Tencent) | `hunyuan` | `hunyuan-turbos-latest` | — |
+
+### Embedding models (`embed()`)
+
+| Provider | Key | Default model |
+|---|---|---|
+| OpenAI | `openai` | `text-embedding-3-small` (also `text-embedding-3-large`) |
+| Google | `google` | `gemini-embedding-001` |
+| Qwen | `qwen` | `text-embedding-v4` |
+| Zhipu | `zhipu` | `embedding-3` |
+
+### Image models (`image()`)
+
+| Provider | Key | Default model |
+|---|---|---|
+| xAI | `xai` | `grok-imagine-image` |
+| OpenAI | `openai` | `gpt-image-1` |
 
 ---
 
@@ -2645,7 +2847,10 @@ Enable debug logging in module config for troubleshooting. Disable it in product
 - Set **maxTokens** as low as practical — saves money and speeds up responses
 - Keep **system prompts** focused — shorter prompts mean lower token costs
 - Use **conversation history** sparingly — each message adds to input token count
-- Cache AI responses when possible (save to a page field, use LazyCron)
+- Cache AI responses when possible (save to a page field, use LazyCron, or the `cache` TTL option)
+- **Prompt caching** is applied automatically where the provider supports it (e.g. Anthropic) — keep stable, reusable context at the *start* of your system prompt so repeated calls hit the provider-side cache and cost less
+- For **embeddings + retrieval**, don't hand-roll storage — use `embed()` with the [Atlas](https://github.com/mxmsmnv/Atlas) RAG module
+- Squad reasoning-model awareness: for Claude reasoning models (Opus 4.7/4.8, Fable) Squad drops unsupported sampling params (e.g. `temperature`) automatically, so you can pass the same options across models
 
 
 ---
