@@ -632,7 +632,6 @@ class SquadProvider {
         $error        = curl_error($ch);
         $errno        = curl_errno($ch);
 
-        curl_close($ch);
 
         // cURL error
         if ($errno) {
@@ -769,7 +768,6 @@ class SquadProvider {
         $error        = curl_error($ch);
         $errno        = curl_errno($ch);
 
-        curl_close($ch);
 
         if ($errno) {
             return [
