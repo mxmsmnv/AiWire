@@ -6,16 +6,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [1.5.1] — 2026-06-28
+
+### Fixed
+- Removed deprecated `curl_close()` calls (no-op since PHP 8.0; emitted a deprecation notice on PHP 8.5).
+
+---
+
 ## [1.5.0] — 2026-06-25
 
+The “AiWire → Squad” release: a rename plus a major capability expansion.
+
 ### Changed
-- **Renamed the module from AiWire to Squad** — class, files, table, and admin UI. Existing installs migrate automatically on install: the encrypted key table is renamed and settings are carried over, and the encryption context is preserved so stored keys keep working.
+- **Renamed the module from AiWire to Squad** — class, files, key table, admin UI, log channel. Existing installs migrate automatically on install: the key table is renamed (`aiwire_keys` → `squad_keys`) and settings are carried over, and the encryption KDF context is preserved so stored keys keep working.
+- **Encrypted key storage** — provider keys moved out of the module config JSON into a dedicated `squad_keys` table, encrypted with libsodium secretbox (secret derived from a `config.php` salt). A database dump no longer exposes keys. `env:NAME` references still supported.
+- **Adaptive-model aware requests** — `temperature`/sampling params are now omitted automatically for models that reject them (Claude Opus 4.7/4.8, Fable/Mythos), preventing 400 errors.
+- **Model catalogue refreshed** — Anthropic set updated to current IDs (added Claude Opus 4.8 as default and Claude Fable 5; bare aliases). OpenAI/Google/xAI/OpenRouter left current.
 
 ### Added
-- Encrypted provider key storage in a dedicated `squad_keys` table (libsodium secretbox; encryption secret derived from a `config.php` salt) — keys are no longer kept in module config or exposed in database dumps.
-- Image generation via `image()` — xAI Grok Imagine and OpenAI (gpt-image-1 / DALL·E 3).
-- Anthropic prompt caching for large system prompts.
-- Tool-use / agent loop via `run()`, supporting both OpenAI and Anthropic tool formats.
+- **`embed()`** — provider-independent embeddings for a string or a batch (OpenAI, Google, Qwen, Zhipu); `getDefaultEmbedProvider()`.
+- **`image()`** — text-to-image generation (xAI Grok Imagine, OpenAI gpt-image-1 / DALL·E 3); `getDefaultImageProvider()`.
+- **`run()`** — multi-step tool-use / agent loop supporting both OpenAI and Anthropic tool-calling formats.
+- **Direct Chinese providers** — DeepSeek, Qwen (Alibaba DashScope), Kimi (Moonshot), GLM (Zhipu), MiniMax, Yi (01.AI), Doubao (ByteDance/Volcengine), Ernie (Baidu Qianfan), Hunyuan (Tencent), all via the OpenAI-compatible path (14 providers total).
+- **Anthropic prompt caching** for large system prompts (automatic for prompts ≥ ~3 KB).
 
 ---
 
